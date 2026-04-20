@@ -1,0 +1,109 @@
+2026-04-20 15:47:09.65
+56862145
+User
+2026-04-20 13:47:09,656 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-04-20 15:47:09.65
+56862145
+User
+2026-04-20 13:47:09,655 INFO sqlalchemy.engine.Engine select current_schema()
+2026-04-20 15:47:09.71
+56862145
+User
+2026-04-20 13:47:09,718 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-04-20 15:47:09.71
+56862145
+User
+2026-04-20 13:47:09,718 INFO sqlalchemy.engine.Engine show standard_conforming_strings
+2026-04-20 15:47:09.76
+56862145
+User
+2026-04-20 13:47:09,764 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-04-20 15:47:09.76
+56862145
+User
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace
+2026-04-20 15:47:09.76
+56862145
+User
+2026-04-20 13:47:09,768 INFO sqlalchemy.engine.Engine [generated in 0.00025s] ('organizations', 'r', 'p', 'f', 'v', 'm', 'pg_catalog')
+2026-04-20 15:47:09.76
+56862145
+User
+WHERE pg_catalog.pg_class.relname = $1::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[$2::VARCHAR, $3::VARCHAR, $4::VARCHAR, $5::VARCHAR, $6::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != $7::VARCHAR
+2026-04-20 15:47:09.76
+56862145
+User
+2026-04-20 13:47:09,768 INFO sqlalchemy.engine.Engine SELECT pg_catalog.pg_class.relname
+2026-04-20 15:47:09.87
+56862145
+User
+2026-04-20 13:47:09,875 INFO sqlalchemy.engine.Engine SELECT pg_catalog.pg_class.relname
+2026-04-20 15:47:09.87
+56862145
+User
+FROM pg_catalog.pg_class JOIN pg_catalog.pg_namespace ON pg_catalog.pg_namespace.oid = pg_catalog.pg_class.relnamespace
+2026-04-20 15:47:09.87
+56862145
+User
+WHERE pg_catalog.pg_class.relname = $1::VARCHAR AND pg_catalog.pg_class.relkind = ANY (ARRAY[$2::VARCHAR, $3::VARCHAR, $4::VARCHAR, $5::VARCHAR, $6::VARCHAR]) AND pg_catalog.pg_table_is_visible(pg_catalog.pg_class.oid) AND pg_catalog.pg_namespace.nspname != $7::VARCHAR
+2026-04-20 15:47:09.87
+56862145
+User
+2026-04-20 13:47:09,875 INFO sqlalchemy.engine.Engine [cached since 0.1076s ago] ('users', 'r', 'p', 'f', 'v', 'm', 'pg_catalog')
+2026-04-20 15:54:00.54
+56862145
+User
+INFO: 35.187.34.21:0 - "GET / HTTP/1.1" 200 OK
+2026-04-20 15:54:02.55
+56862145
+User
+INFO: 34.52.246.180:0 - "GET /favicon.ico HTTP/1.1" 200 OK
+2026-04-20 15:54:11.87
+56862145
+User
+INFO: 34.38.35.146:0 - "GET / HTTP/1.1" 200 OK
+2026-04-20 15:55:08.58
+56862145
+User
+INFO: 34.79.180.169:0 - "GET /dashboard HTTP/1.1" 200 OK
+2026-04-20 15:55:08.83
+56862145
+User
+INFO: 34.52.246.180:0 - "GET /assets/index-Cd_NQh8r.css HTTP/1.1" 200 OK
+2026-04-20 15:55:08.83
+56862145
+User
+INFO: 34.52.246.180:0 - "GET /assets/index-D-Z8JBD9.js HTTP/1.1" 200 OK
+2026-04-20 15:55:10.44
+56862145
+User
+INFO: 34.38.35.146:0 - "GET /favicon.svg HTTP/1.1" 200 OK
+2026-04-20 15:56:10.37
+56862145
+User
+INFO: 34.38.35.146:0 - "GET /api/sites?page=1&per_page=20 HTTP/1.1" 401 Unauthorized
+2026-04-20 15:56:10.37
+56862145
+User
+INFO: 34.52.246.180:0 - "GET /api/crawls?page=1 HTTP/1.1" 401 Unauthorized
+
+2026-04-20 15:56:10.82
+56862145
+User
+INFO: 35.187.34.21:0 - "GET /login HTTP/1.1" 200 OK
+2026-04-20 15:56:17.53
+56862145
+User
+INFO: 35.187.34.21:0 - "GET /api/sites?page=1&per_page=20 HTTP/1.1" 401 Unauthorized
+2026-04-20 15:56:17.61
+56862145
+User
+INFO: 34.38.180.25:0 - "GET /api/crawls?page=1 HTTP/1.1" 401 Unauthorized
+2026-04-20 15:56:38.88
+56862145
+User
+INFO: 35.187.34.21:0 - "GET /api/sites?page=1&per_page=20 HTTP/1.1" 401 Unauthorized
+2026-04-20 15:56:38.93
+56862145
+User
+INFO: 34.79.180.169:0 - "GET /api/crawls?page=1 HTTP/1.1" 401 Unauthorized

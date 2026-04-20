@@ -1,0 +1,83 @@
+modules = ["nodejs-20", "python-3.12", "web", "postgresql-16"]
+[agent]
+expertMode = true
+integrations = ["javascript_database:1.0.0"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "xcodebuild", "zlib"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start API"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd apps/web && npm run dev"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Start API"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd apps/api && python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+waitForPort = 8000
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5050
+externalPort = 3000
+
+[[ports]]
+localPort = 5051
+externalPort = 3001
+
+[[ports]]
+localPort = 5052
+externalPort = 3002
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
+
+[deployment]
+deploymentTarget = "autoscale"
+build = ["npm", "run", "build"]
+publicDir = "apps/web/dist"
+run = ["npm", "run", "start"]
+
+[userenv]
+
+[userenv.shared]
+SUPABASE_JWT_SECRET = "autoseo-replit-jwt-secret-minimum-32-chars-secure!!"
+ENVIRONMENT = "development"
+DEBUG = "true"
+VITE_SUPABASE_URL = "https://qqzdoyqeftbqoldhheut.supabase.co"
+VITE_SUPABASE_ANON_KEY = "sb_publishable_UqaOBgb5-oMQZYUQjuqvJw_DtuVAWb5"

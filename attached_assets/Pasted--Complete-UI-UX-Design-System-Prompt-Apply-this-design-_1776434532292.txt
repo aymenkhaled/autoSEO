@@ -1,0 +1,389 @@
+🎨 Complete UI/UX Design System Prompt
+Apply this design system to every page, every component, every interaction in the app. No exceptions.
+
+1. FONT & TYPOGRAPHY
+Font Family: Use Inter from Google Fonts
+
+<!-- Add to index.html -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+/* index.css */
+body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+Typography Scale:
+
+Hero/Page titles: text-4xl md:text-5xl font-bold tracking-tight
+Section titles: text-2xl md:text-3xl font-bold tracking-tight
+Card titles: text-lg font-semibold
+Body text: text-sm text-foreground
+Secondary text: text-sm text-muted-foreground
+Tiny labels: text-xs text-muted-foreground uppercase tracking-wider font-medium
+2. COLOR SYSTEM (HSL TOKENS - PASTE EXACTLY)
+/* index.css - Replace all default tokens */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 199 89% 48%;
+    --radius: 0.75rem;
+    
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+  }
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 199 89% 48%;
+    
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+  }
+}
+
+Semantic Color Usage Rules:
+
+Backgrounds: bg-background (page), bg-card (cards), bg-muted (subtle areas)
+Text: text-foreground (primary), text-muted-foreground (secondary)
+Borders: border-border
+Accents: bg-primary text-primary-foreground (CTAs)
+NEVER hardcode bg-white, bg-gray-900, text-black - always use semantic tokens
+Status Colors (with dark variants):
+
+Success: text-green-600 dark:text-green-400 bg-green-500/10
+Warning: text-yellow-600 dark:text-yellow-400 bg-yellow-500/10
+Error: text-red-600 dark:text-red-400 bg-red-500/10
+Info: text-blue-600 dark:text-blue-400 bg-blue-500/10
+3. THEME (DARK-FIRST WITH TOGGLE)
+Install: next-themes
+
+// App.tsx
+import { ThemeProvider } from 'next-themes';
+<ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+  {children}
+</ThemeProvider>
+
+Theme toggle button in top nav using sun/moon icons from lucide-react.
+
+4. UI COMPONENT LIBRARY
+Use shadcn/ui exclusively - install all components upfront:
+
+npx shadcn@latest add button card input label dialog dropdown-menu sheet tabs toast tooltip badge avatar select textarea checkbox switch radio-group separator scroll-area skeleton alert popover command form table progress
+
+Toast notifications: Use sonner package
+Icons: Use lucide-react ONLY - never mix icon libraries
+
+5. SPACING & LAYOUT
+Spacing scale (use these, no others):
+
+Tight: gap-2, space-y-2 (8px)
+Default: gap-4, space-y-4 (16px)
+Comfortable: gap-6, space-y-6 (24px)
+Generous: gap-8, space-y-8 (32px)
+Sections: py-12 md:py-16 between major sections
+Container widths:
+
+Page wrapper: max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
+Forms/narrow: max-w-md mx-auto
+Reading content: max-w-2xl mx-auto
+Card padding: Always p-6 minimum, never less
+
+6. BORDER RADIUS (CONSISTENCY RULE)
+Buttons, inputs: rounded-lg
+Cards: rounded-xl
+Modals/dialogs: rounded-2xl
+Pills/badges: rounded-full
+Avatars: rounded-full
+NEVER mix rounded-md and rounded-lg randomly
+7. CARD DESIGN (USE FOR ALL CONTAINERS)
+Standard card:
+
+<Card className="bg-card border border-border rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow">
+
+Glassmorphism premium card:
+
+<Card className="bg-card/50 backdrop-blur-xl border border-border/50 rounded-xl p-6 shadow-lg">
+
+Featured card with gradient border:
+
+<div className="relative rounded-xl p-[1px] bg-gradient-to-br from-cyan-500 to-blue-600">
+  <div className="bg-card rounded-xl p-6">
+    {/* content */}
+  </div>
+</div>
+
+8. BUTTON STYLES
+Primary CTA (gradient):
+
+<Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all">
+  Get Started
+</Button>
+
+Secondary: <Button variant="outline">
+Ghost: <Button variant="ghost">
+Destructive: <Button variant="destructive">
+
+Sizes:
+
+Default: h-10 px-4
+Large: h-12 px-6 text-base
+Small: h-8 px-3 text-xs
+Icon: h-10 w-10
+Always include: Hover state, focus ring, disabled state. Never use raw <button>.
+
+9. INPUT FIELDS
+<div className="space-y-2">
+  <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+  <Input
+    id="email"
+    type="email"
+    placeholder="you@example.com"
+    className="h-11 bg-background border-border focus:ring-2 focus:ring-primary"
+  />
+  <p className="text-xs text-muted-foreground">Helper text here</p>
+</div>
+
+Error state:
+
+<Input className="border-destructive focus:ring-destructive" />
+<p className="text-xs text-destructive">Error message</p>
+
+10. NAVIGATION
+Top Nav (Desktop):
+
+Height: h-16
+Logo on left, nav links center, user menu + theme toggle right
+Sticky: sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border
+Sidebar (Dashboard):
+
+Width: w-64
+Each item: flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors
+Active state: bg-primary/10 text-primary font-medium
+Icon + label pattern using lucide-react
+Mobile Bottom Nav:
+
+Fixed: fixed bottom-0 left-0 right-0 bg-background border-t border-border h-16
+4-5 items max, icon above label
+Hidden on md:hidden, sidebar shown on hidden md:flex
+11. LANDING PAGE PATTERNS
+Hero Section:
+
+<section className="relative min-h-[90vh] flex items-center overflow-hidden">
+  {/* Animated gradient background */}
+  <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-transparent to-blue-600/10" />
+  <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl" />
+  <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl" />
+  
+  <div className="relative max-w-7xl mx-auto px-4 text-center space-y-8">
+    <Badge className="bg-primary/10 text-primary border-primary/20">New Feature</Badge>
+    <h1 className="text-5xl md:text-7xl font-bold tracking-tight bg-gradient-to-br from-foreground to-foreground/70 bg-clip-text">
+      Headline Here
+    </h1>
+    <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Subheadline</p>
+    <div className="flex gap-4 justify-center">
+      <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600">Get Started</Button>
+      <Button size="lg" variant="outline">Learn More</Button>
+    </div>
+  </div>
+</section>
+
+Features Grid: grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6
+
+Each feature card: icon (in colored circle), title, description
+Icon container: w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary
+12. AUTH PAGES (SPLIT LAYOUT)
+<div className="min-h-screen flex">
+  {/* Left: Dark branding panel */}
+  <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-cyan-950 to-slate-900 relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(6,182,212,0.15),transparent)]" />
+    <div className="relative z-10 p-12 flex flex-col justify-between text-white">
+      <Logo />
+      <div>
+        <h2 className="text-4xl font-bold mb-4">Welcome back</h2>
+        <p className="text-white/70">Brand message here</p>
+      </div>
+    </div>
+  </div>
+  
+  {/* Right: Form */}
+  <div className="flex-1 flex items-center justify-center p-8 bg-background">
+    <div className="w-full max-w-md space-y-6">
+      {/* Form content */}
+    </div>
+  </div>
+</div>
+
+13. DASHBOARD PATTERNS
+Stats cards row:
+
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+  <Card className="p-6">
+    <div className="flex items-center justify-between mb-2">
+      <p className="text-sm text-muted-foreground">Total Users</p>
+      <Users className="h-5 w-5 text-muted-foreground" />
+    </div>
+    <div className="text-3xl font-bold">12,847</div>
+    <p className="text-xs text-green-500 mt-1 flex items-center gap-1">
+      <TrendingUp className="h-3 w-3" /> +12% from last month
+    </p>
+  </Card>
+</div>
+
+14. STATES (CRITICAL - NEVER SKIP)
+Loading state: Use Skeleton, not spinners
+
+<Skeleton className="h-8 w-48 rounded-lg" />
+<Skeleton className="h-4 w-full rounded-md mt-2" />
+
+Empty state:
+
+<div className="flex flex-col items-center justify-center py-16 text-center">
+  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+    <Inbox className="h-8 w-8 text-muted-foreground" />
+  </div>
+  <h3 className="text-lg font-semibold mb-2">No items yet</h3>
+  <p className="text-sm text-muted-foreground mb-6 max-w-sm">Description text here</p>
+  <Button>Create First Item</Button>
+</div>
+
+Error state: Red icon + message + retry button
+Success state: Green checkmark + message
+
+15. FORMS
+Use react-hook-form + zod validation
+Field spacing: space-y-4
+Submit button: full width on mobile, auto on desktop
+Show validation errors below each field
+Disable submit button while loading, show spinner inside button
+Use <Form> components from shadcn for consistency
+16. MODALS & DIALOGS
+Use shadcn Dialog component
+Max width: sm:max-w-md for forms, sm:max-w-2xl for content
+Always include: Title, description, action buttons (Cancel + Confirm)
+Destructive actions: red Confirm button + clear warning text
+Close on Esc and overlay click
+17. TABLES
+<Table>
+  <TableHeader>
+    <TableRow className="border-border">
+      <TableHead className="text-xs uppercase tracking-wider text-muted-foreground">Name</TableHead>
+    </TableRow>
+  </TableHeader>
+  <TableBody>
+    <TableRow className="border-border hover:bg-muted/50 transition-colors">
+      <TableCell>Content</TableCell>
+    </TableRow>
+  </TableBody>
+</Table>
+
+18. BADGES & STATUS INDICATORS
+<Badge className="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">Active</Badge>
+<Badge className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20">Pending</Badge>
+<Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">Failed</Badge>
+
+Status dots: <div className="h-2 w-2 rounded-full bg-green-500" />
+
+19. ANIMATIONS & TRANSITIONS
+Default transitions: transition-all duration-200
+Page transitions: Fade in with animate-in fade-in duration-300
+Hover effects:
+
+Cards: subtle lift hover:shadow-md hover:-translate-y-0.5
+Buttons: scale hover:scale-[1.02] active:scale-[0.98]
+Use Framer Motion for complex animations only
+
+20. RESPONSIVE BREAKPOINTS
+Mobile first - design for 375px minimum
+sm: 640px (large phones)
+md: 768px (tablets) - sidebar appears
+lg: 1024px (laptops) - full desktop layout
+xl: 1280px (large screens)
+Mobile-specific:
+
+Stack everything vertically
+Bottom nav instead of sidebar
+Larger touch targets: min-h-[44px]
+Hide secondary actions in dropdowns
+Use sheets/drawers instead of side modals
+21. ACCESSIBILITY (NON-NEGOTIABLE)
+All interactive elements need focus rings: focus-visible:ring-2 focus-visible:ring-primary
+Min contrast ratio 4.5:1 (WCAG AA)
+All images need alt text
+All inputs need <Label>
+Use semantic HTML (<nav>, <main>, <article>)
+ARIA labels on icon-only buttons
+Keyboard navigation works everywhere
+22. ICONS USAGE RULES
+Source: lucide-react ONLY
+Sizes: h-4 w-4 (inline), h-5 w-5 (default), h-6 w-6 (large)
+Always paired with text-muted-foreground when decorative
+Match text color when meaningful: text-primary, text-destructive
+23. SHADOWS
+Subtle: shadow-sm (cards default)
+Default: shadow-md (hover state)
+Elevated: shadow-lg (modals)
+Glow effect: shadow-[0_0_30px_rgba(6,182,212,0.3)] (premium CTAs)
+24. WHAT NEVER TO DO
+❌ Don't hardcode colors (bg-gray-900, text-white)
+❌ Don't use raw <button> or <input> - use shadcn
+❌ Don't mix icon libraries
+❌ Don't use rounded-md and rounded-lg randomly
+❌ Don't skip dark mode
+❌ Don't use spinners - use Skeleton
+❌ Don't cramp content - use generous spacing
+❌ Don't forget hover/focus/disabled states
+❌ Don't use small touch targets on mobile
+❌ Don't skip empty states
+❌ Don't use default shadcn theme - customize HSL tokens
+❌ Don't use Comic Sans, Arial, Times - only Inter
+
+✅ DESIGN CHECKLIST FOR EVERY PAGE
+ Uses semantic color tokens (no hardcoded colors)
+ Dark mode looks great
+ Has proper loading state (Skeleton)
+ Has empty state (icon + message + CTA)
+ Has error state
+ Mobile responsive
+ All interactive elements have hover + focus
+ Generous spacing (p-6, gap-6)
+ Consistent border radius (rounded-xl cards)
+ Toast notifications for user actions
+ Smooth transitions (transition-all duration-200)
+ Inter font loaded
+ Lucide icons only
+ No raw HTML elements (use shadcn)

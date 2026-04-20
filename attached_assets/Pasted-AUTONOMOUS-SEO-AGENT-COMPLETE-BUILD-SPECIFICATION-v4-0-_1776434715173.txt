@@ -1,0 +1,702 @@
+AUTONOMOUS SEO AGENT — COMPLETE BUILD SPECIFICATION v4.0
+For the AI Code Editor: Build this exactly as specified. Do not deviate. Do not ask for permission. Every section is mandatory unless marked OPTIONAL. Read this entire document before writing any code.
+
+⚠️ CRITICAL EXECUTION RULES
+No placeholders, no mocks, no "TODO later" — Every feature must be functional end-to-end on first build
+Every async operation needs: loading state, error state, empty state, success toast
+Every API endpoint needs: authentication check, rate limiting, input validation, error handling, audit log entry
+Every database query needs: org_id filtering (multi-tenancy), proper indexes, parameterized bindings
+Build features VERTICALLY (full stack per feature) not horizontally (don't build all backend then all frontend)
+Test as you build — Each feature must work before moving to next
+Commit after every working feature
+1. ARCHITECTURE (FINAL — NON-NEGOTIABLE)
+Component	Technology	Why
+Backend	Python 3.12 + FastAPI 0.115+	Async, Pydantic validation, OpenAPI auto-docs
+Backend ORM	SQLAlchemy 2.0 async + Alembic	Type-safe migrations
+Frontend	React 19 + Vite 6 + TypeScript (strict)	Fast HMR, simple build
+Routing	React Router v7	File-based, data loading
+Database	Supabase (PostgreSQL 15)	RLS, auth, realtime built-in
+Cache/Queue	Upstash Redis (serverless)	Pay-per-request, scales to zero
+Task Queue	Celery 5.4	Battle-tested for long crawls
+File Storage	Cloudflare R2	S3-compatible, no egress fees
+Auth	Supabase Auth	JWT + OAuth + magic links
+Payments	Stripe (subscriptions + usage metering)	Day-1 monetization
+Email	Resend + React Email	3000/mo free
+Frontend Host	Cloudflare Pages	Free, global CDN
+Backend Host	Railway	Docker auto-deploy
+Crawler Primary	Crawl4AI v0.8+	LLM-native, async BFS
+Anti-Detect	Camoufox (Firefox-based)	Bypasses fingerprinting
+Commercial Scraper	ScrapFly API	Cloudflare/DataDome bypass
+Fast Reader	Jina AI Reader (r.jina.ai)	Free tier, 85% success
+AI	Claude Sonnet 4.5 via Anthropic SDK	Best for code/content generation
+Embeddings	Voyage AI	Duplicate content detection
+Performance	PageSpeed Insights API + Lighthouse CI	Core Web Vitals
+Observability	Sentry (errors) + Grafana Cloud (metrics)	Production debugging
+Secrets	Doppler	Multi-env sync
+CI/CD	GitHub Actions	Test → build → deploy
+2. REPO STRUCTURE
+autoseo/
+├── apps/
+│   ├── web/              # React 19 + Vite SPA
+│   └── api/              # FastAPI backend
+├── packages/
+│   ├── crawler/          # Crawl4AI + 4-layer scraper
+│   ├── ai-engine/        # Claude agent + prompts
+│   ├── cms-adapters/     # WordPress, Shopify, Webflow, GitHub, Wix, Squarespace
+│   ├── seo-rules/        # Issue detection rules engine
+│   └── shared/           # Pydantic models, encryption, types
+├── workers/
+│   ├── celery_app.py
+│   └── tasks/            # crawl, fix, report, notification, scheduled
+├── infra/
+│   ├── docker-compose.yml
+│   ├── Dockerfile.api
+│   ├── Dockerfile.worker
+│   └── railway.toml
+├── supabase/
+│   ├── migrations/
+│   └── seed.sql
+└── docs/
+    ├── api.md
+    └── runbook.md
+
+3. COMPLETE FEATURE LIST (CORE + GAPS FILLED)
+A. Core SEO Auditing (from original plan)
+✅ Multi-layer crawler (Jina → Crawl4AI → ScrapFly fallback)
+✅ robots.txt + sitemap.xml parsing
+✅ JS-rendered content support
+✅ Canonical/redirect chain detection
+✅ hreflang bidirectional validation
+✅ Schema.org validation
+✅ Image optimization detection
+✅ Core Web Vitals (LCP, FID, CLS, TTFB)
+✅ Internal link equity analysis
+✅ Duplicate content (SimHash + Voyage embeddings)
+B. NEW — Missing Features (Critical Gaps Found)
+B1. Keyword & Rank Tracking (NEW)
+Track target keywords per site
+Daily SERP position tracking via DataForSEO API
+Position history charts
+Featured snippet detection
+Competitor keyword overlap
+Search volume + difficulty scores
+B2. Competitor Analysis (NEW)
+Add up to 5 competitors per site
+Auto-crawl competitor sites monthly
+Keyword gap analysis (keywords competitors rank for, you don't)
+Backlink comparison
+Content topic gaps
+Alert when competitor publishes new content
+B3. Backlink Monitoring (NEW)
+Use Ahrefs API or Majestic API (or fallback to free Common Crawl)
+Track new/lost backlinks
+Domain authority changes
+Toxic backlink detection
+Disavow file generator
+B4. Content Optimization (NEW)
+AI content brief generator (target keyword → outline + suggestions)
+Content scoring (compare to top-10 SERP results)
+Internal linking suggestions across site
+Topic cluster mapping
+Content refresh recommendations (pages ranking 11-30 worth optimizing)
+B5. AI Fix Workflows (ENHANCED)
+Auto-fix tier system:
+Tier 1 (auto-apply): Missing alt text, missing meta descriptions, broken canonical → AI generates + applies automatically
+Tier 2 (one-click approve): Title rewrites, schema markup additions → AI generates, user clicks approve
+Tier 3 (manual): Content rewrites, structural changes → AI suggests, user implements
+Confidence threshold: Only auto-apply if AI confidence ≥ 0.85
+A/B Testing: Apply fix to 50% of traffic via JS snippet, measure CTR change
+B6. Staging Mode (NEW — CRITICAL)
+Before applying fixes to production: preview in iframe
+Show diff (before/after HTML)
+Schedule fixes for off-peak hours
+Rollback within 24h with one click
+B7. Notification System (NEW)
+Email alerts (Resend): critical issues, weekly digest, fix applied
+Slack integration: real-time alerts to channel
+Webhooks: send events to user's URL
+In-app notifications with bell icon + badge count
+User preferences: which events to notify on
+B8. Team Collaboration (NEW)
+Invite team members (admin/editor/viewer roles)
+Comments on issues
+Assign issues to team members
+Activity feed showing who did what
+Email notifications when assigned/mentioned
+B9. White-Label / Agency Mode (NEW — REVENUE)
+Add up to 50 client sites under one agency account
+Custom branding: logo, colors, domain
+Client-facing reports with agency branding
+Per-client billing
+Subdomain hosting (clientname.youragency.com)
+B10. Browser Extension (NEW)
+Chrome/Firefox extension
+Right-click any page → "Audit with AutoSEO"
+Quick SEO checks without leaving site
+Add page to project from extension
+B11. API Access (NEW — Pro Plan)
+REST API for all operations
+API keys with scoped permissions
+Rate limiting per plan tier
+OpenAPI docs at /docs
+Webhooks for events
+B12. Bulk Operations (NEW)
+Select multiple issues → bulk fix/ignore/assign
+CSV export of all issues
+CSV import for bulk URL additions
+Bulk re-crawl
+B13. Scheduled Reports (NEW)
+Daily/weekly/monthly PDF reports
+Email delivery via Resend
+Custom report templates
+White-label branding for agencies
+B14. Onboarding Flow (NEW — CRITICAL)
+Step 1: Welcome modal
+Step 2: Add first site (with verification options)
+Step 3: Choose competitors (optional)
+Step 4: Add target keywords (optional)
+Step 5: Initial crawl starts (show progress in real-time)
+Step 6: First issues displayed with celebration
+Interactive product tour (use react-joyride)
+B15. Usage Dashboard (NEW)
+Show user: pages crawled this month, issues fixed, AI fixes used
+Plan limits visible at all times
+Upgrade prompts when nearing limits
+Detailed usage history chart
+4. DATABASE SCHEMA (ENHANCED — NEW TABLES ADDED)
+Keep ALL tables from original plan, PLUS add these:
+
+-- KEYWORDS TRACKING
+CREATE TABLE keywords (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  keyword       TEXT NOT NULL,
+  search_volume INTEGER,
+  difficulty    SMALLINT,
+  cpc           NUMERIC(10,2),
+  country       TEXT DEFAULT 'US',
+  language      TEXT DEFAULT 'en',
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(site_id, keyword, country, language)
+);
+CREATE TABLE keyword_rankings (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  keyword_id    UUID REFERENCES keywords(id) NOT NULL,
+  position      SMALLINT,
+  url           TEXT,
+  featured_snippet BOOLEAN DEFAULT false,
+  checked_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_keyword_rankings_kid_date ON keyword_rankings(keyword_id, checked_at DESC);
+-- COMPETITORS
+CREATE TABLE competitors (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  domain        TEXT NOT NULL,
+  name          TEXT,
+  last_analyzed_at TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- BACKLINKS
+CREATE TABLE backlinks (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  source_url    TEXT NOT NULL,
+  target_url    TEXT NOT NULL,
+  anchor_text   TEXT,
+  domain_authority SMALLINT,
+  is_dofollow   BOOLEAN,
+  is_toxic      BOOLEAN DEFAULT false,
+  first_seen_at TIMESTAMPTZ,
+  last_seen_at  TIMESTAMPTZ,
+  status        TEXT DEFAULT 'active' -- active, lost, disavowed
+);
+-- TEAM MEMBERS
+CREATE TABLE team_members (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  user_id       UUID REFERENCES users(id),
+  email         TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'viewer', -- owner, admin, editor, viewer
+  invited_by    UUID REFERENCES users(id),
+  invite_token  TEXT,
+  invite_status TEXT DEFAULT 'pending', -- pending, accepted, rejected
+  invited_at    TIMESTAMPTZ DEFAULT now(),
+  joined_at     TIMESTAMPTZ
+);
+-- ISSUE COMMENTS
+CREATE TABLE issue_comments (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  issue_id      UUID REFERENCES issues(id) NOT NULL,
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  user_id       UUID REFERENCES users(id) NOT NULL,
+  content       TEXT NOT NULL,
+  mentions      UUID[],
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- ISSUE ASSIGNMENTS
+ALTER TABLE issues ADD COLUMN assigned_to UUID REFERENCES users(id);
+ALTER TABLE issues ADD COLUMN due_date TIMESTAMPTZ;
+-- NOTIFICATIONS
+CREATE TABLE notifications (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  user_id       UUID REFERENCES users(id) NOT NULL,
+  type          TEXT NOT NULL, -- issue_assigned, fix_applied, weekly_digest, etc
+  title         TEXT NOT NULL,
+  message       TEXT,
+  link          TEXT,
+  read          BOOLEAN DEFAULT false,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_notif_user_unread ON notifications(user_id, read, created_at DESC);
+-- NOTIFICATION PREFERENCES
+CREATE TABLE notification_preferences (
+  user_id       UUID PRIMARY KEY REFERENCES users(id),
+  email_critical_issues BOOLEAN DEFAULT true,
+  email_weekly_digest BOOLEAN DEFAULT true,
+  email_fix_applied BOOLEAN DEFAULT true,
+  email_assignments BOOLEAN DEFAULT true,
+  slack_webhook_url TEXT,
+  slack_critical_issues BOOLEAN DEFAULT false,
+  in_app_all BOOLEAN DEFAULT true
+);
+-- SCHEDULED REPORTS
+CREATE TABLE scheduled_reports (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  frequency     TEXT NOT NULL, -- daily, weekly, monthly
+  recipients    TEXT[] NOT NULL,
+  template      TEXT DEFAULT 'standard',
+  next_run_at   TIMESTAMPTZ,
+  enabled       BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- USAGE TRACKING
+CREATE TABLE usage_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  event_type    TEXT NOT NULL, -- crawl_pages, ai_fix, api_call, etc
+  quantity      INTEGER DEFAULT 1,
+  metadata      JSONB,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_usage_org_type_date ON usage_events(org_id, event_type, created_at DESC);
+-- WEBHOOKS
+CREATE TABLE webhooks (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  url           TEXT NOT NULL,
+  events        TEXT[] NOT NULL, -- crawl_completed, fix_applied, issue_critical, etc
+  secret        TEXT NOT NULL, -- for HMAC signature
+  enabled       BOOLEAN DEFAULT true,
+  last_triggered_at TIMESTAMPTZ,
+  failure_count INTEGER DEFAULT 0,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- WEBHOOK DELIVERIES (for retry/debugging)
+CREATE TABLE webhook_deliveries (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  webhook_id    UUID REFERENCES webhooks(id) NOT NULL,
+  event_type    TEXT NOT NULL,
+  payload       JSONB NOT NULL,
+  status_code   SMALLINT,
+  response_body TEXT,
+  attempt       SMALLINT DEFAULT 1,
+  delivered_at  TIMESTAMPTZ
+);
+-- AI USAGE TRACKING (cost monitoring)
+CREATE TABLE ai_usage (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  model         TEXT NOT NULL, -- claude-sonnet-4-5, voyage-3
+  input_tokens  INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cost_cents    INTEGER NOT NULL,
+  feature       TEXT, -- fix_generation, content_brief, etc
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- ADD RLS POLICIES FOR ALL NEW TABLES
+ALTER TABLE keywords ENABLE ROW LEVEL SECURITY;
+ALTER TABLE keyword_rankings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE competitors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE backlinks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE issue_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usage_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;
+-- Apply org_isolation policy to each
+
+5. SUBSCRIPTION TIERS & USAGE LIMITS
+Feature	Free	Starter ($29/mo)	Pro ($99/mo)	Agency ($299/mo)
+Sites	1	3	10	50
+Pages crawled/month	100	1,000	10,000	100,000
+Crawl frequency	Manual	Weekly	Daily	Real-time
+AI auto-fixes/month	10	100	1,000	Unlimited
+Keyword tracking	0	25	200	1,000
+Competitor tracking	0	1	5	20
+Team members	1	1	5	Unlimited
+Scheduled reports	❌	Weekly	Daily	All
+API access	❌	❌	✅	✅
+White-label	❌	❌	❌	✅
+Webhooks	❌	❌	✅	✅
+Priority support	❌	Email	Email	Slack channel
+Implement Stripe metered billing for overage on Pro/Agency plans.
+
+6. SECURITY ADDITIONS (BEYOND ORIGINAL)
+In addition to the 6 layers in original plan, add:
+
+Layer 7 — Compliance
+GDPR: Data export endpoint (POST /user/export), data deletion (DELETE /user), cookie consent banner
+CCPA: "Do Not Sell" toggle in settings
+SOC 2 ready: Audit log for ALL state changes (already in change_log)
+Privacy Policy + ToS: Required pages
+Layer 8 — AI Safety
+Prompt injection protection: Sanitize all user inputs before sending to Claude
+Output validation: Validate AI-generated HTML doesn't contain <script> tags
+Cost limits: Per-org daily AI spend cap, alert at 80%
+Rate limiting on AI endpoints: 10 fix generations per minute per user
+Layer 9 — CMS Connection Security
+Read-only first: Test with read-only token before requesting write access
+Sandboxed writes: Never write to production until user clicks "Apply"
+Token rotation: Force token refresh every 90 days
+IP allowlist: Optional, for enterprise customers
+7. DESIGN SYSTEM (COMPLETE — REPLACES ORIGINAL)
+Setup
+npm install tailwindcss@latest @tailwindcss/vite shadcn next-themes lucide-react sonner framer-motion recharts cmdk
+npx shadcn@latest init
+npx shadcn@latest add button card input label dialog dropdown-menu sheet tabs toast tooltip badge avatar select textarea checkbox switch separator scroll-area skeleton alert popover command form table progress
+
+Font: Inter (Google Fonts)
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+Color Tokens (Premium Dark-First)
+:root {
+  --background: 0 0% 100%; --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%; --card-foreground: 240 10% 3.9%;
+  --primary: 199 89% 48%; --primary-foreground: 0 0% 100%;
+  --muted: 240 4.8% 95.9%; --muted-foreground: 240 3.8% 46.1%;
+  --border: 240 5.9% 90%; --input: 240 5.9% 90%;
+  --destructive: 0 84.2% 60.2%; --success: 142 76% 36%;
+  --warning: 38 92% 50%; --info: 217 91% 60%;
+  --radius: 0.75rem;
+}
+.dark {
+  --background: 240 10% 3.9%; --foreground: 0 0% 98%;
+  --card: 240 10% 6%; --card-foreground: 0 0% 98%;
+  --primary: 199 89% 48%; --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%; --border: 240 3.7% 15.9%;
+  --destructive: 0 62.8% 30.6%; --success: 142 71% 45%;
+}
+
+Strict Design Rules
+Always use semantic tokens — bg-background, bg-card, text-foreground, border-border. NEVER bg-white, bg-gray-900
+Border radius hierarchy: buttons/inputs rounded-lg, cards rounded-xl, modals rounded-2xl, badges rounded-full
+Card padding: ALWAYS p-6 minimum
+Spacing scale: gap-2, gap-4, gap-6, gap-8 only
+Typography:
+Page title: text-4xl font-bold tracking-tight
+Section: text-2xl font-bold
+Card title: text-lg font-semibold
+Body: text-sm
+Secondary: text-sm text-muted-foreground
+Buttons: Use shadcn <Button>. Primary CTA = bg-gradient-to-r from-cyan-500 to-blue-600
+Loading: Use <Skeleton>, NEVER spinners
+Empty states: icon + heading + description + CTA button
+Toasts: Use sonner for ALL user actions
+Icons: lucide-react ONLY, sized h-4 w-4 (inline) or h-5 w-5 (default)
+Required Pages with Layout
+Public:
+
+/ — Landing (hero, features grid, pricing, testimonials, CTA)
+/pricing — Plan comparison table
+/login, /signup — Split layout (dark gradient panel left, form right)
+/privacy, /terms — Legal pages
+Authenticated (Dashboard Shell with sidebar):
+
+/dashboard — Overview cards (sites count, issues fixed, score trend)
+/sites — Sites grid with status, last crawl, score
+/sites/:id — Site detail (tabs: Overview, Issues, Pages, Keywords, Competitors, Backlinks, Settings)
+/sites/:id/issues/:issueId — Issue detail with AI fix preview
+/keywords — All keywords across sites with rank tracking
+/competitors — Competitor analysis dashboard
+/reports — Generated reports + scheduled reports config
+/team — Members list, invite form, roles
+/integrations — CMS connections (WordPress, Shopify, etc), Slack, webhooks
+/api-keys — Generate/manage API keys
+/billing — Current plan, usage, payment method, invoices
+/settings — Profile, notification preferences, danger zone
+Layout Components (build first)
+<DashboardShell> — Sidebar (w-64) + header + main content area
+<PageHeader title description actions>
+<StatCard label value change icon>
+<DataTable columns data /> — using TanStack Table v8
+<EmptyState icon title description action>
+<LoadingSkeleton variant="card|table|page" />
+8. CRAWLER ENHANCEMENTS (BEYOND 4-LAYER)
+Keep 4-layer system from original. Add:
+
+Smart Crawl Decisioning
+Skip pages with noindex directive
+Respect crawl-delay from robots.txt
+Use If-Modified-Since header to skip unchanged pages
+Concurrent requests with semaphore (max 5 per domain)
+JavaScript Snippet (Real User Monitoring)
+Already in original plan
+ENHANCE: Capture First Input Delay properly via event-timing Observer
+ENHANCE: Capture Interaction to Next Paint (INP) — Google's new Core Web Vital
+ENHANCE: Sample rate control (1% for high-traffic sites)
+Visual Regression Detection (NEW)
+Take screenshot of each page during crawl
+Compare to previous crawl using pixelmatch
+Alert if visual changes detected (could indicate broken layout)
+Mobile vs Desktop (NEW)
+Crawl each page twice: mobile and desktop user agents
+Detect mobile-specific issues (viewport, touch targets, font size)
+Mobile-first indexing compliance check
+9. AI ENGINE SPECIFICATIONS
+Claude Prompts (Store in packages/ai-engine/prompts/)
+Fix Generation Prompt Template:
+
+You are an expert SEO specialist. Generate a fix for this issue.
+ISSUE TYPE: {issue.type}
+CURRENT VALUE: {issue.current_value}
+PAGE URL: {page.url}
+PAGE TITLE: {page.title}
+PAGE H1: {page.h1_text}
+PAGE CONTENT EXCERPT: {page.content[:1000]}
+TARGET KEYWORDS: {site.target_keywords}
+CONSTRAINTS:
+- Title tags: 30-60 characters, include primary keyword
+- Meta descriptions: 120-160 characters, compelling CTA
+- Output ONLY the suggested fix, no explanation
+- Output format: JSON with keys "fix" (string) and "confidence" (0-1)
+
+AI Cost Controls
+Track every API call in ai_usage table
+Daily budget per org (default $5/day for Pro)
+Alert user at 80% usage
+Hard stop at 100%
+Use Claude Haiku for simple tasks (alt text), Sonnet for complex (content rewrites)
+Embedding Service (Voyage AI)
+Generate embeddings for all crawled page content
+Store in pages.content_embedding (vector(1024))
+Use pgvector extension
+Detect duplicate content via cosine similarity > 0.95
+10. CMS ADAPTERS (DETAILED)
+WordPress
+OAuth 2.0 connection
+Use REST API: /wp-json/wp/v2/posts, /pages
+Update via PATCH with title, meta (Yoast/Rank Math fields)
+Test connection with read-only call before saving token
+Shopify
+OAuth via Shopify Partner App
+Use Admin API for products, pages, blog posts
+Update meta_title, meta_description fields
+Webflow
+API key (Webflow doesn't have OAuth for API)
+Use CMS API to update collection items
+SEO Settings update via API
+Wix (NEW)
+Wix Headless API
+OAuth 2.0
+Limited write capabilities — flag this in UI
+Squarespace (NEW)
+API key
+Limited API — read-only suggestions, manual fixes
+GitHub (for static sites)
+GitHub App with Contents R/W
+Create branch → commit fix → open PR
+User reviews and merges
+Support for: Next.js, Astro, Hugo, Jekyll
+Generic (HTML/JS Snippet)
+For sites without API access
+Inject fixes via JS snippet on page load
+Less reliable but universal fallback
+11. STRIPE INTEGRATION (DETAILED)
+Products to Create in Stripe
+Starter — $29/month recurring
+Pro — $99/month recurring + metered overage
+Agency — $299/month recurring + metered overage
+Lifetime — $499 one-time (limited offer)
+Webhook Handlers (REQUIRED)
+customer.subscription.created → Update org plan
+customer.subscription.updated → Update plan/status
+customer.subscription.deleted → Downgrade to free
+invoice.payment_succeeded → Send receipt
+invoice.payment_failed → Email + grace period 7 days
+customer.subscription.trial_will_end → Day 25 reminder
+Trial Logic
+14-day free trial of Pro plan on signup
+No credit card required
+Day 11 + Day 13: reminder emails
+After expiration: downgrade to Free, all data preserved
+12. ENVIRONMENT VARIABLES (COMPLETE LIST)
+# Database
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+# Cache/Queue
+REDIS_URL=rediss://...
+# Auth
+JWT_SECRET=...
+DOPPLER_MASTER_ENCRYPTION_KEY=... # 32-byte hex
+# AI
+ANTHROPIC_API_KEY=sk-ant-...
+VOYAGE_API_KEY=...
+# Crawlers
+SCRAPFLY_API_KEY=...
+DATAFORSEO_LOGIN=...
+DATAFORSEO_PASSWORD=...
+# Performance
+PAGESPEED_API_KEY=...
+# Storage
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=autoseo-assets
+# Email
+RESEND_API_KEY=re_...
+EMAIL_FROM=noreply@autoseo.com
+# Payments
+STRIPE_SECRET_KEY=sk_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_AGENCY=price_...
+# Integrations
+SLACK_CLIENT_ID=...
+SLACK_CLIENT_SECRET=...
+GITHUB_APP_ID=...
+GITHUB_APP_PRIVATE_KEY=...
+WORDPRESS_OAUTH_CLIENT_ID=...
+WORDPRESS_OAUTH_SECRET=...
+SHOPIFY_API_KEY=...
+SHOPIFY_API_SECRET=...
+# Observability
+SENTRY_DSN=https://...
+GRAFANA_CLOUD_API_KEY=...
+# URLs
+FRONTEND_URL=https://app.autoseo.com
+API_URL=https://api.autoseo.com
+SNIPPET_CDN_URL=https://cdn.autoseo.com
+
+13. BUILD ORDER (PHASES)
+Phase 1 — Foundation (Week 1)
+Monorepo setup, Docker Compose, Supabase project
+FastAPI base + health endpoint + Sentry
+React + Vite + Tailwind + shadcn setup with design tokens
+Auth flow (signup, login, logout) with Supabase
+Org creation on signup, RLS policies, JWT custom claims
+Stripe products + checkout + webhooks
+Encryption utils, basic CRUD for sites
+Phase 2 — Core Crawler (Week 2)
+robots.txt + sitemap parsers
+Layer 1: Jina AI Reader
+Layer 2: Crawl4AI + Camoufox
+Layer 3: ScrapFly fallback
+SEO Extractor (all signals)
+Lighthouse integration
+Celery setup + crawl orchestrator
+Issue generation rules engine
+Phase 3 — Dashboard (Week 3)
+Dashboard shell (sidebar, header, theme toggle)
+Sites list + add site flow + verification
+Site detail with tabs
+Issues list with filters + detail view
+Pages list with sortable table
+SEO score visualization (charts)
+Onboarding flow + product tour
+Phase 4 — AI Fixes (Week 4)
+Claude integration + prompt templates
+Fix generation per issue type
+Confidence scoring + tier classification
+Preview + approve flow
+CMS adapter framework
+WordPress adapter (first)
+Apply fix → verify → log to change_log
+Rollback functionality
+Phase 5 — Advanced Features (Week 5-6)
+Keyword tracking + DataForSEO integration
+Competitor analysis + auto-crawl
+Backlink monitoring
+Content optimization tools
+Team collaboration (invites, roles, comments)
+Notifications (email + in-app + Slack)
+Webhooks system
+API keys + REST API + OpenAPI docs
+Phase 6 — CMS Adapters (Week 7)
+Shopify adapter
+Webflow adapter
+Wix adapter
+Squarespace adapter
+GitHub adapter (for static sites)
+JS snippet adapter (universal fallback)
+Phase 7 — Reports & Polish (Week 8)
+PDF report generator (@react-pdf/renderer)
+Scheduled reports (Celery beat)
+Usage dashboard + plan limits enforcement
+White-label/agency mode
+Browser extension (separate Chrome project)
+Performance optimization
+E2E testing with Playwright
+14. TESTING REQUIREMENTS
+Unit tests: pytest for backend, Vitest for frontend (≥70% coverage)
+Integration tests: pytest-asyncio with test database
+E2E tests: Playwright covering signup → add site → crawl → fix flow
+Load tests: k6 against API endpoints (target: 1000 RPS)
+Crawler tests: Mock servers with known SEO issues to verify detection
+15. MONITORING & ALERTS
+Sentry (Errors)
+Capture all unhandled exceptions
+Source maps for frontend
+Performance monitoring (10% sample rate)
+Grafana Cloud (Metrics)
+Track these metrics:
+
+API response time p50/p95/p99
+Active crawls
+Queue depth (Celery)
+AI cost per hour
+Failed crawls count
+Database query time
+Active users (DAU/MAU)
+Alerts (PagerDuty or email)
+API error rate > 5%
+Queue depth > 1000
+AI daily cost > $100
+Database connections > 80%
+Failed crawls > 10% in 1 hour
+16. DEFINITION OF DONE (BEFORE LAUNCH)
+ All 16 phases complete
+ All Stripe webhooks tested
+ All CMS adapters tested with real accounts
+ Onboarding flow takes < 5 minutes
+ First crawl completes < 2 minutes for 100 pages
+ AI fix generation < 5 seconds
+ Mobile responsive on all pages
+ Dark/light mode working everywhere
+ All forms have validation + error handling
+ All actions have toast feedback
+ Rate limiting on all public endpoints
+ Sentry catches all errors
+ Privacy Policy + Terms pages live
+ GDPR data export/delete working
+ Email deliverability tested (SPF/DKIM/DMARC)
+ Backup strategy in place (daily DB snapshots)
+ Status page set up (status.autoseo.com)
+ Documentation complete
+END OF SPECIFICATION
+
+Build EXACTLY this. No deviations. Reference this document when in doubt. If something seems missing, add it logically following the patterns established here.
+
+This version closes 22+ gaps from the original including: keyword tracking, competitor analysis, backlinks, team collaboration, notifications, webhooks, API access, AI cost controls, white-label mode, browser extension, mobile crawling, visual regression, INP metric, GDPR compliance, prompt injection protection, scheduled reports, bulk operations, onboarding flow, usage dashboard, staging mode, A/B testing for fixes, and more.

@@ -1,0 +1,1829 @@
+AUTONOMOUS SEO AGENT — COMPLETE BUILD SPECIFICATION v4.0
+For the AI Code Editor: Build this exactly as specified. Do not deviate. Do not ask for permission. Every section is mandatory unless marked OPTIONAL. Read this entire document before writing any code.
+
+⚠️ CRITICAL EXECUTION RULES
+No placeholders, no mocks, no "TODO later" — Every feature must be functional end-to-end on first build
+Every async operation needs: loading state, error state, empty state, success toast
+Every API endpoint needs: authentication check, rate limiting, input validation, error handling, audit log entry
+Every database query needs: org_id filtering (multi-tenancy), proper indexes, parameterized bindings
+Build features VERTICALLY (full stack per feature) not horizontally (don't build all backend then all frontend)
+Test as you build — Each feature must work before moving to next
+Commit after every working feature
+1. ARCHITECTURE (FINAL — NON-NEGOTIABLE)
+Component	Technology	Why
+Backend	Python 3.12 + FastAPI 0.115+	Async, Pydantic validation, OpenAPI auto-docs
+Backend ORM	SQLAlchemy 2.0 async + Alembic	Type-safe migrations
+Frontend	React 19 + Vite 6 + TypeScript (strict)	Fast HMR, simple build
+Routing	React Router v7	File-based, data loading
+Database	Supabase (PostgreSQL 15)	RLS, auth, realtime built-in
+Cache/Queue	Upstash Redis (serverless)	Pay-per-request, scales to zero
+Task Queue	Celery 5.4	Battle-tested for long crawls
+File Storage	Cloudflare R2	S3-compatible, no egress fees
+Auth	Supabase Auth	JWT + OAuth + magic links
+Payments	Stripe (subscriptions + usage metering)	Day-1 monetization
+Email	Resend + React Email	3000/mo free
+Frontend Host	Cloudflare Pages	Free, global CDN
+Backend Host	Railway	Docker auto-deploy
+Crawler Primary	Crawl4AI v0.8+	LLM-native, async BFS
+Anti-Detect	Camoufox (Firefox-based)	Bypasses fingerprinting
+Commercial Scraper	ScrapFly API	Cloudflare/DataDome bypass
+Fast Reader	Jina AI Reader (r.jina.ai)	Free tier, 85% success
+AI	Claude Sonnet 4.5 via Anthropic SDK	Best for code/content generation
+Embeddings	Voyage AI	Duplicate content detection
+Performance	PageSpeed Insights API + Lighthouse CI	Core Web Vitals
+Observability	Sentry (errors) + Grafana Cloud (metrics)	Production debugging
+Secrets	Doppler	Multi-env sync
+CI/CD	GitHub Actions	Test → build → deploy
+2. REPO STRUCTURE
+autoseo/
+├── apps/
+│   ├── web/              # React 19 + Vite SPA
+│   └── api/              # FastAPI backend
+├── packages/
+│   ├── crawler/          # Crawl4AI + 4-layer scraper
+│   ├── ai-engine/        # Claude agent + prompts
+│   ├── cms-adapters/     # WordPress, Shopify, Webflow, GitHub, Wix, Squarespace
+│   ├── seo-rules/        # Issue detection rules engine
+│   └── shared/           # Pydantic models, encryption, types
+├── workers/
+│   ├── celery_app.py
+│   └── tasks/            # crawl, fix, report, notification, scheduled
+├── infra/
+│   ├── docker-compose.yml
+│   ├── Dockerfile.api
+│   ├── Dockerfile.worker
+│   └── railway.toml
+├── supabase/
+│   ├── migrations/
+│   └── seed.sql
+└── docs/
+    ├── api.md
+    └── runbook.md
+
+3. COMPLETE FEATURE LIST (CORE + GAPS FILLED)
+A. Core SEO Auditing (from original plan)
+✅ Multi-layer crawler (Jina → Crawl4AI → ScrapFly fallback)
+✅ robots.txt + sitemap.xml parsing
+✅ JS-rendered content support
+✅ Canonical/redirect chain detection
+✅ hreflang bidirectional validation
+✅ Schema.org validation
+✅ Image optimization detection
+✅ Core Web Vitals (LCP, FID, CLS, TTFB)
+✅ Internal link equity analysis
+✅ Duplicate content (SimHash + Voyage embeddings)
+B. NEW — Missing Features (Critical Gaps Found)
+B1. Keyword & Rank Tracking (NEW)
+Track target keywords per site
+Daily SERP position tracking via DataForSEO API
+Position history charts
+Featured snippet detection
+Competitor keyword overlap
+Search volume + difficulty scores
+B2. Competitor Analysis (NEW)
+Add up to 5 competitors per site
+Auto-crawl competitor sites monthly
+Keyword gap analysis (keywords competitors rank for, you don't)
+Backlink comparison
+Content topic gaps
+Alert when competitor publishes new content
+B3. Backlink Monitoring (NEW)
+Use Ahrefs API or Majestic API (or fallback to free Common Crawl)
+Track new/lost backlinks
+Domain authority changes
+Toxic backlink detection
+Disavow file generator
+B4. Content Optimization (NEW)
+AI content brief generator (target keyword → outline + suggestions)
+Content scoring (compare to top-10 SERP results)
+Internal linking suggestions across site
+Topic cluster mapping
+Content refresh recommendations (pages ranking 11-30 worth optimizing)
+B5. AI Fix Workflows (ENHANCED)
+Auto-fix tier system:
+Tier 1 (auto-apply): Missing alt text, missing meta descriptions, broken canonical → AI generates + applies automatically
+Tier 2 (one-click approve): Title rewrites, schema markup additions → AI generates, user clicks approve
+Tier 3 (manual): Content rewrites, structural changes → AI suggests, user implements
+Confidence threshold: Only auto-apply if AI confidence ≥ 0.85
+A/B Testing: Apply fix to 50% of traffic via JS snippet, measure CTR change
+B6. Staging Mode (NEW — CRITICAL)
+Before applying fixes to production: preview in iframe
+Show diff (before/after HTML)
+Schedule fixes for off-peak hours
+Rollback within 24h with one click
+B7. Notification System (NEW)
+Email alerts (Resend): critical issues, weekly digest, fix applied
+Slack integration: real-time alerts to channel
+Webhooks: send events to user's URL
+In-app notifications with bell icon + badge count
+User preferences: which events to notify on
+B8. Team Collaboration (NEW)
+Invite team members (admin/editor/viewer roles)
+Comments on issues
+Assign issues to team members
+Activity feed showing who did what
+Email notifications when assigned/mentioned
+B9. White-Label / Agency Mode (NEW — REVENUE)
+Add up to 50 client sites under one agency account
+Custom branding: logo, colors, domain
+Client-facing reports with agency branding
+Per-client billing
+Subdomain hosting (clientname.youragency.com)
+B10. Browser Extension (NEW)
+Chrome/Firefox extension
+Right-click any page → "Audit with AutoSEO"
+Quick SEO checks without leaving site
+Add page to project from extension
+B11. API Access (NEW — Pro Plan)
+REST API for all operations
+API keys with scoped permissions
+Rate limiting per plan tier
+OpenAPI docs at /docs
+Webhooks for events
+B12. Bulk Operations (NEW)
+Select multiple issues → bulk fix/ignore/assign
+CSV export of all issues
+CSV import for bulk URL additions
+Bulk re-crawl
+B13. Scheduled Reports (NEW)
+Daily/weekly/monthly PDF reports
+Email delivery via Resend
+Custom report templates
+White-label branding for agencies
+B14. Onboarding Flow (NEW — CRITICAL)
+Step 1: Welcome modal
+Step 2: Add first site (with verification options)
+Step 3: Choose competitors (optional)
+Step 4: Add target keywords (optional)
+Step 5: Initial crawl starts (show progress in real-time)
+Step 6: First issues displayed with celebration
+Interactive product tour (use react-joyride)
+B15. Usage Dashboard (NEW)
+Show user: pages crawled this month, issues fixed, AI fixes used
+Plan limits visible at all times
+Upgrade prompts when nearing limits
+Detailed usage history chart
+4. DATABASE SCHEMA (ENHANCED — NEW TABLES ADDED)
+Keep ALL tables from original plan, PLUS add these:
+
+-- KEYWORDS TRACKING
+CREATE TABLE keywords (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  keyword       TEXT NOT NULL,
+  search_volume INTEGER,
+  difficulty    SMALLINT,
+  cpc           NUMERIC(10,2),
+  country       TEXT DEFAULT 'US',
+  language      TEXT DEFAULT 'en',
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(site_id, keyword, country, language)
+);
+CREATE TABLE keyword_rankings (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  keyword_id    UUID REFERENCES keywords(id) NOT NULL,
+  position      SMALLINT,
+  url           TEXT,
+  featured_snippet BOOLEAN DEFAULT false,
+  checked_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_keyword_rankings_kid_date ON keyword_rankings(keyword_id, checked_at DESC);
+-- COMPETITORS
+CREATE TABLE competitors (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  domain        TEXT NOT NULL,
+  name          TEXT,
+  last_analyzed_at TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- BACKLINKS
+CREATE TABLE backlinks (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  source_url    TEXT NOT NULL,
+  target_url    TEXT NOT NULL,
+  anchor_text   TEXT,
+  domain_authority SMALLINT,
+  is_dofollow   BOOLEAN,
+  is_toxic      BOOLEAN DEFAULT false,
+  first_seen_at TIMESTAMPTZ,
+  last_seen_at  TIMESTAMPTZ,
+  status        TEXT DEFAULT 'active' -- active, lost, disavowed
+);
+-- TEAM MEMBERS
+CREATE TABLE team_members (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  user_id       UUID REFERENCES users(id),
+  email         TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'viewer', -- owner, admin, editor, viewer
+  invited_by    UUID REFERENCES users(id),
+  invite_token  TEXT,
+  invite_status TEXT DEFAULT 'pending', -- pending, accepted, rejected
+  invited_at    TIMESTAMPTZ DEFAULT now(),
+  joined_at     TIMESTAMPTZ
+);
+-- ISSUE COMMENTS
+CREATE TABLE issue_comments (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  issue_id      UUID REFERENCES issues(id) NOT NULL,
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  user_id       UUID REFERENCES users(id) NOT NULL,
+  content       TEXT NOT NULL,
+  mentions      UUID[],
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- ISSUE ASSIGNMENTS
+ALTER TABLE issues ADD COLUMN assigned_to UUID REFERENCES users(id);
+ALTER TABLE issues ADD COLUMN due_date TIMESTAMPTZ;
+-- NOTIFICATIONS
+CREATE TABLE notifications (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  user_id       UUID REFERENCES users(id) NOT NULL,
+  type          TEXT NOT NULL, -- issue_assigned, fix_applied, weekly_digest, etc
+  title         TEXT NOT NULL,
+  message       TEXT,
+  link          TEXT,
+  read          BOOLEAN DEFAULT false,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_notif_user_unread ON notifications(user_id, read, created_at DESC);
+-- NOTIFICATION PREFERENCES
+CREATE TABLE notification_preferences (
+  user_id       UUID PRIMARY KEY REFERENCES users(id),
+  email_critical_issues BOOLEAN DEFAULT true,
+  email_weekly_digest BOOLEAN DEFAULT true,
+  email_fix_applied BOOLEAN DEFAULT true,
+  email_assignments BOOLEAN DEFAULT true,
+  slack_webhook_url TEXT,
+  slack_critical_issues BOOLEAN DEFAULT false,
+  in_app_all BOOLEAN DEFAULT true
+);
+-- SCHEDULED REPORTS
+CREATE TABLE scheduled_reports (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  frequency     TEXT NOT NULL, -- daily, weekly, monthly
+  recipients    TEXT[] NOT NULL,
+  template      TEXT DEFAULT 'standard',
+  next_run_at   TIMESTAMPTZ,
+  enabled       BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- USAGE TRACKING
+CREATE TABLE usage_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  event_type    TEXT NOT NULL, -- crawl_pages, ai_fix, api_call, etc
+  quantity      INTEGER DEFAULT 1,
+  metadata      JSONB,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX idx_usage_org_type_date ON usage_events(org_id, event_type, created_at DESC);
+-- WEBHOOKS
+CREATE TABLE webhooks (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  url           TEXT NOT NULL,
+  events        TEXT[] NOT NULL, -- crawl_completed, fix_applied, issue_critical, etc
+  secret        TEXT NOT NULL, -- for HMAC signature
+  enabled       BOOLEAN DEFAULT true,
+  last_triggered_at TIMESTAMPTZ,
+  failure_count INTEGER DEFAULT 0,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- WEBHOOK DELIVERIES (for retry/debugging)
+CREATE TABLE webhook_deliveries (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  webhook_id    UUID REFERENCES webhooks(id) NOT NULL,
+  event_type    TEXT NOT NULL,
+  payload       JSONB NOT NULL,
+  status_code   SMALLINT,
+  response_body TEXT,
+  attempt       SMALLINT DEFAULT 1,
+  delivered_at  TIMESTAMPTZ
+);
+-- AI USAGE TRACKING (cost monitoring)
+CREATE TABLE ai_usage (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  model         TEXT NOT NULL, -- claude-sonnet-4-5, voyage-3
+  input_tokens  INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cost_cents    INTEGER NOT NULL,
+  feature       TEXT, -- fix_generation, content_brief, etc
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+-- ADD RLS POLICIES FOR ALL NEW TABLES
+ALTER TABLE keywords ENABLE ROW LEVEL SECURITY;
+ALTER TABLE keyword_rankings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE competitors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE backlinks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE issue_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE usage_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE webhooks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY;
+-- Apply org_isolation policy to each
+
+5. SUBSCRIPTION TIERS & USAGE LIMITS
+Feature	Free	Starter ($29/mo)	Pro ($99/mo)	Agency ($299/mo)
+Sites	1	3	10	50
+Pages crawled/month	100	1,000	10,000	100,000
+Crawl frequency	Manual	Weekly	Daily	Real-time
+AI auto-fixes/month	10	100	1,000	Unlimited
+Keyword tracking	0	25	200	1,000
+Competitor tracking	0	1	5	20
+Team members	1	1	5	Unlimited
+Scheduled reports	❌	Weekly	Daily	All
+API access	❌	❌	✅	✅
+White-label	❌	❌	❌	✅
+Webhooks	❌	❌	✅	✅
+Priority support	❌	Email	Email	Slack channel
+Implement Stripe metered billing for overage on Pro/Agency plans.
+
+6. SECURITY ADDITIONS (BEYOND ORIGINAL)
+In addition to the 6 layers in original plan, add:
+
+Layer 7 — Compliance
+GDPR: Data export endpoint (POST /user/export), data deletion (DELETE /user), cookie consent banner
+CCPA: "Do Not Sell" toggle in settings
+SOC 2 ready: Audit log for ALL state changes (already in change_log)
+Privacy Policy + ToS: Required pages
+Layer 8 — AI Safety
+Prompt injection protection: Sanitize all user inputs before sending to Claude
+Output validation: Validate AI-generated HTML doesn't contain <script> tags
+Cost limits: Per-org daily AI spend cap, alert at 80%
+Rate limiting on AI endpoints: 10 fix generations per minute per user
+Layer 9 — CMS Connection Security
+Read-only first: Test with read-only token before requesting write access
+Sandboxed writes: Never write to production until user clicks "Apply"
+Token rotation: Force token refresh every 90 days
+IP allowlist: Optional, for enterprise customers
+7. DESIGN SYSTEM (COMPLETE — REPLACES ORIGINAL)
+Setup
+npm install tailwindcss@latest @tailwindcss/vite shadcn next-themes lucide-react sonner framer-motion recharts cmdk
+npx shadcn@latest init
+npx shadcn@latest add button card input label dialog dropdown-menu sheet tabs toast tooltip badge avatar select textarea checkbox switch separator scroll-area skeleton alert popover command form table progress
+
+Font: Inter (Google Fonts)
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+Color Tokens (Premium Dark-First)
+:root {
+  --background: 0 0% 100%; --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%; --card-foreground: 240 10% 3.9%;
+  --primary: 199 89% 48%; --primary-foreground: 0 0% 100%;
+  --muted: 240 4.8% 95.9%; --muted-foreground: 240 3.8% 46.1%;
+  --border: 240 5.9% 90%; --input: 240 5.9% 90%;
+  --destructive: 0 84.2% 60.2%; --success: 142 76% 36%;
+  --warning: 38 92% 50%; --info: 217 91% 60%;
+  --radius: 0.75rem;
+}
+.dark {
+  --background: 240 10% 3.9%; --foreground: 0 0% 98%;
+  --card: 240 10% 6%; --card-foreground: 0 0% 98%;
+  --primary: 199 89% 48%; --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%; --border: 240 3.7% 15.9%;
+  --destructive: 0 62.8% 30.6%; --success: 142 71% 45%;
+}
+
+Strict Design Rules
+Always use semantic tokens — bg-background, bg-card, text-foreground, border-border. NEVER bg-white, bg-gray-900
+Border radius hierarchy: buttons/inputs rounded-lg, cards rounded-xl, modals rounded-2xl, badges rounded-full
+Card padding: ALWAYS p-6 minimum
+Spacing scale: gap-2, gap-4, gap-6, gap-8 only
+Typography:
+Page title: text-4xl font-bold tracking-tight
+Section: text-2xl font-bold
+Card title: text-lg font-semibold
+Body: text-sm
+Secondary: text-sm text-muted-foreground
+Buttons: Use shadcn <Button>. Primary CTA = bg-gradient-to-r from-cyan-500 to-blue-600
+Loading: Use <Skeleton>, NEVER spinners
+Empty states: icon + heading + description + CTA button
+Toasts: Use sonner for ALL user actions
+Icons: lucide-react ONLY, sized h-4 w-4 (inline) or h-5 w-5 (default)
+Required Pages with Layout
+Public:
+
+/ — Landing (hero, features grid, pricing, testimonials, CTA)
+/pricing — Plan comparison table
+/login, /signup — Split layout (dark gradient panel left, form right)
+/privacy, /terms — Legal pages
+Authenticated (Dashboard Shell with sidebar):
+
+/dashboard — Overview cards (sites count, issues fixed, score trend)
+/sites — Sites grid with status, last crawl, score
+/sites/:id — Site detail (tabs: Overview, Issues, Pages, Keywords, Competitors, Backlinks, Settings)
+/sites/:id/issues/:issueId — Issue detail with AI fix preview
+/keywords — All keywords across sites with rank tracking
+/competitors — Competitor analysis dashboard
+/reports — Generated reports + scheduled reports config
+/team — Members list, invite form, roles
+/integrations — CMS connections (WordPress, Shopify, etc), Slack, webhooks
+/api-keys — Generate/manage API keys
+/billing — Current plan, usage, payment method, invoices
+/settings — Profile, notification preferences, danger zone
+Layout Components (build first)
+<DashboardShell> — Sidebar (w-64) + header + main content area
+<PageHeader title description actions>
+<StatCard label value change icon>
+<DataTable columns data /> — using TanStack Table v8
+<EmptyState icon title description action>
+<LoadingSkeleton variant="card|table|page" />
+8. CRAWLER ENHANCEMENTS (BEYOND 4-LAYER)
+Keep 4-layer system from original. Add:
+
+Smart Crawl Decisioning
+Skip pages with noindex directive
+Respect crawl-delay from robots.txt
+Use If-Modified-Since header to skip unchanged pages
+Concurrent requests with semaphore (max 5 per domain)
+JavaScript Snippet (Real User Monitoring)
+Already in original plan
+ENHANCE: Capture First Input Delay properly via event-timing Observer
+ENHANCE: Capture Interaction to Next Paint (INP) — Google's new Core Web Vital
+ENHANCE: Sample rate control (1% for high-traffic sites)
+Visual Regression Detection (NEW)
+Take screenshot of each page during crawl
+Compare to previous crawl using pixelmatch
+Alert if visual changes detected (could indicate broken layout)
+Mobile vs Desktop (NEW)
+Crawl each page twice: mobile and desktop user agents
+Detect mobile-specific issues (viewport, touch targets, font size)
+Mobile-first indexing compliance check
+9. AI ENGINE SPECIFICATIONS
+Claude Prompts (Store in packages/ai-engine/prompts/)
+Fix Generation Prompt Template:
+
+You are an expert SEO specialist. Generate a fix for this issue.
+ISSUE TYPE: {issue.type}
+CURRENT VALUE: {issue.current_value}
+PAGE URL: {page.url}
+PAGE TITLE: {page.title}
+PAGE H1: {page.h1_text}
+PAGE CONTENT EXCERPT: {page.content[:1000]}
+TARGET KEYWORDS: {site.target_keywords}
+CONSTRAINTS:
+- Title tags: 30-60 characters, include primary keyword
+- Meta descriptions: 120-160 characters, compelling CTA
+- Output ONLY the suggested fix, no explanation
+- Output format: JSON with keys "fix" (string) and "confidence" (0-1)
+
+AI Cost Controls
+Track every API call in ai_usage table
+Daily budget per org (default $5/day for Pro)
+Alert user at 80% usage
+Hard stop at 100%
+Use Claude Haiku for simple tasks (alt text), Sonnet for complex (content rewrites)
+Embedding Service (Voyage AI)
+Generate embeddings for all crawled page content
+Store in pages.content_embedding (vector(1024))
+Use pgvector extension
+Detect duplicate content via cosine similarity > 0.95
+10. CMS ADAPTERS (DETAILED)
+WordPress
+OAuth 2.0 connection
+Use REST API: /wp-json/wp/v2/posts, /pages
+Update via PATCH with title, meta (Yoast/Rank Math fields)
+Test connection with read-only call before saving token
+Shopify
+OAuth via Shopify Partner App
+Use Admin API for products, pages, blog posts
+Update meta_title, meta_description fields
+Webflow
+API key (Webflow doesn't have OAuth for API)
+Use CMS API to update collection items
+SEO Settings update via API
+Wix (NEW)
+Wix Headless API
+OAuth 2.0
+Limited write capabilities — flag this in UI
+Squarespace (NEW)
+API key
+Limited API — read-only suggestions, manual fixes
+GitHub (for static sites)
+GitHub App with Contents R/W
+Create branch → commit fix → open PR
+User reviews and merges
+Support for: Next.js, Astro, Hugo, Jekyll
+Generic (HTML/JS Snippet)
+For sites without API access
+Inject fixes via JS snippet on page load
+Less reliable but universal fallback
+11. STRIPE INTEGRATION (DETAILED)
+Products to Create in Stripe
+Starter — $29/month recurring
+Pro — $99/month recurring + metered overage
+Agency — $299/month recurring + metered overage
+Lifetime — $499 one-time (limited offer)
+Webhook Handlers (REQUIRED)
+customer.subscription.created → Update org plan
+customer.subscription.updated → Update plan/status
+customer.subscription.deleted → Downgrade to free
+invoice.payment_succeeded → Send receipt
+invoice.payment_failed → Email + grace period 7 days
+customer.subscription.trial_will_end → Day 25 reminder
+Trial Logic
+14-day free trial of Pro plan on signup
+No credit card required
+Day 11 + Day 13: reminder emails
+After expiration: downgrade to Free, all data preserved
+12. ENVIRONMENT VARIABLES (COMPLETE LIST)
+# Database
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
+# Cache/Queue
+REDIS_URL=rediss://...
+# Auth
+JWT_SECRET=...
+DOPPLER_MASTER_ENCRYPTION_KEY=... # 32-byte hex
+# AI
+ANTHROPIC_API_KEY=sk-ant-...
+VOYAGE_API_KEY=...
+# Crawlers
+SCRAPFLY_API_KEY=...
+DATAFORSEO_LOGIN=...
+DATAFORSEO_PASSWORD=...
+# Performance
+PAGESPEED_API_KEY=...
+# Storage
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=autoseo-assets
+# Email
+RESEND_API_KEY=re_...
+EMAIL_FROM=noreply@autoseo.com
+# Payments
+STRIPE_SECRET_KEY=sk_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_STARTER=price_...
+STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_AGENCY=price_...
+# Integrations
+SLACK_CLIENT_ID=...
+SLACK_CLIENT_SECRET=...
+GITHUB_APP_ID=...
+GITHUB_APP_PRIVATE_KEY=...
+WORDPRESS_OAUTH_CLIENT_ID=...
+WORDPRESS_OAUTH_SECRET=...
+SHOPIFY_API_KEY=...
+SHOPIFY_API_SECRET=...
+# Observability
+SENTRY_DSN=https://...
+GRAFANA_CLOUD_API_KEY=...
+# URLs
+FRONTEND_URL=https://app.autoseo.com
+API_URL=https://api.autoseo.com
+SNIPPET_CDN_URL=https://cdn.autoseo.com
+
+13. BUILD ORDER (PHASES)
+Phase 1 — Foundation (Week 1)
+Monorepo setup, Docker Compose, Supabase project
+FastAPI base + health endpoint + Sentry
+React + Vite + Tailwind + shadcn setup with design tokens
+Auth flow (signup, login, logout) with Supabase
+Org creation on signup, RLS policies, JWT custom claims
+Stripe products + checkout + webhooks
+Encryption utils, basic CRUD for sites
+Phase 2 — Core Crawler (Week 2)
+robots.txt + sitemap parsers
+Layer 1: Jina AI Reader
+Layer 2: Crawl4AI + Camoufox
+Layer 3: ScrapFly fallback
+SEO Extractor (all signals)
+Lighthouse integration
+Celery setup + crawl orchestrator
+Issue generation rules engine
+Phase 3 — Dashboard (Week 3)
+Dashboard shell (sidebar, header, theme toggle)
+Sites list + add site flow + verification
+Site detail with tabs
+Issues list with filters + detail view
+Pages list with sortable table
+SEO score visualization (charts)
+Onboarding flow + product tour
+Phase 4 — AI Fixes (Week 4)
+Claude integration + prompt templates
+Fix generation per issue type
+Confidence scoring + tier classification
+Preview + approve flow
+CMS adapter framework
+WordPress adapter (first)
+Apply fix → verify → log to change_log
+Rollback functionality
+Phase 5 — Advanced Features (Week 5-6)
+Keyword tracking + DataForSEO integration
+Competitor analysis + auto-crawl
+Backlink monitoring
+Content optimization tools
+Team collaboration (invites, roles, comments)
+Notifications (email + in-app + Slack)
+Webhooks system
+API keys + REST API + OpenAPI docs
+Phase 6 — CMS Adapters (Week 7)
+Shopify adapter
+Webflow adapter
+Wix adapter
+Squarespace adapter
+GitHub adapter (for static sites)
+JS snippet adapter (universal fallback)
+Phase 7 — Reports & Polish (Week 8)
+PDF report generator (@react-pdf/renderer)
+Scheduled reports (Celery beat)
+Usage dashboard + plan limits enforcement
+White-label/agency mode
+Browser extension (separate Chrome project)
+Performance optimization
+E2E testing with Playwright
+14. TESTING REQUIREMENTS
+Unit tests: pytest for backend, Vitest for frontend (≥70% coverage)
+Integration tests: pytest-asyncio with test database
+E2E tests: Playwright covering signup → add site → crawl → fix flow
+Load tests: k6 against API endpoints (target: 1000 RPS)
+Crawler tests: Mock servers with known SEO issues to verify detection
+15. MONITORING & ALERTS
+Sentry (Errors)
+Capture all unhandled exceptions
+Source maps for frontend
+Performance monitoring (10% sample rate)
+Grafana Cloud (Metrics)
+Track these metrics:
+
+API response time p50/p95/p99
+Active crawls
+Queue depth (Celery)
+AI cost per hour
+Failed crawls count
+Database query time
+Active users (DAU/MAU)
+Alerts (PagerDuty or email)
+API error rate > 5%
+Queue depth > 1000
+AI daily cost > $100
+Database connections > 80%
+Failed crawls > 10% in 1 hour
+16. DEFINITION OF DONE (BEFORE LAUNCH)
+ All 16 phases complete
+ All Stripe webhooks tested
+ All CMS adapters tested with real accounts
+ Onboarding flow takes < 5 minutes
+ First crawl completes < 2 minutes for 100 pages
+ AI fix generation < 5 seconds
+ Mobile responsive on all pages
+ Dark/light mode working everywhere
+ All forms have validation + error handling
+ All actions have toast feedback
+ Rate limiting on all public endpoints
+ Sentry catches all errors
+ Privacy Policy + Terms pages live
+ GDPR data export/delete working
+ Email deliverability tested (SPF/DKIM/DMARC)
+ Backup strategy in place (daily DB snapshots)
+ Status page set up (status.autoseo.com)
+ Documentation complete
+END OF SPECIFICATION
+
+Build EXACTLY this. No deviations. Reference this document when in doubt. If something seems missing, add it logically following the patterns established here.
+This version closes 22+ gaps from the original including: keyword tracking, competitor analysis, backlinks, team collaboration, notifications, webhooks, API access, AI cost controls, white-label mode, browser extension, mobile crawling, visual regression, INP metric, GDPR compliance, prompt injection protection, scheduled reports, bulk operations, onboarding flow, usage dashboard, staging mode, A/B testing for fixes, and more.
+The app is in a clean state. Here's what the natural next steps would be for the AutoSEO platform, in priority order:
+
+Wire real data to Issues and Fixes pages — both currently show empty states. The backend routes already exist (/issues, /fixes), so connecting them to the API would make the dashboard genuinely functional end-to-end.
+
+Build the Analytics page — the sidebar links to /dashboard/analytics but the page doesn't exist yet. It should show SEO score trends over time per site.
+
+Auth flow validation — the app uses Supabase for auth, but the FastAPI backend needs to validate Supabase JWTs on protected routes. This would need testing to confirm it's wired correctly.
+
+JS Snippet integration — the spec mentions a 3KB embed for real-user Core Web Vitals monitoring. The backend already has a /snippet route and a snippet_events table, but the client-side snippet itself doesn't exist yet.
+also analyse this summary plan find the gap on it the better solution opportunity , find anything we missed , we forgot , wee need to add and compare it with our app right now which we have built and generate the new plan to complete the work  
+do not care aabout the design requiremeent in this summary change it all for somthing you actualy beleieve that its the best you can do 
+
+# AUTONOMOUS SEO AGENT — BUILD PLAN FOR AI CODE EDITOR
+### Version 3.0 — April 2026 | React + FastAPI Architecture
+
+---
+
+## ARCHITECTURE DECISIONS (FINAL — DO NOT CHANGE)
+
+| Decision | Choice | Reason |
+|---|---|---|
+| Backend language | **Python 3.12** | All scraping/AI/ML tools are Python-native |
+| Backend framework | **FastAPI** | Async-first, Pydantic validation, auto OpenAPI docs |
+| Task queue | **Celery + Redis** | Battle-tested, Python-native |
+| Frontend | **React 19 + Vite** | SPA dashboard behind auth — no SSR needed with separate API |
+| Routing | **React Router v7** | File-based routing, data loading, nested layouts |
+| Database | **Supabase (PostgreSQL)** | RLS, auth, realtime, storage — all in one |
+| Cache / Queue | **Redis (Upstash)** | Serverless, scales to zero |
+| File storage | **Cloudflare R2** | S3-compatible, no egress fees |
+| Auth | **Supabase Auth** | JWT, OAuth, magic links built-in |
+| Payments | **Stripe** | Subscriptions + usage metering from day 1 |
+| Email | **Resend** | 3000/mo free, React Email templates |
+| Frontend hosting | **Cloudflare Pages** | Free, global CDN, SPA-optimized |
+| Backend hosting | **Railway** | Docker-based, auto-deploy, $5/mo start |
+| Secrets | **Doppler** | Syncs to all environments automatically |
+| Observability | **Sentry + Grafana Cloud** | Error tracking + metrics |
+| Primary crawler | **Crawl4AI v0.8+** | LLM-native, async, BFS deep crawl |
+| Anti-detect browser | **Camoufox** | Firefox-based, bypasses fingerprinting |
+| Commercial scraping | **ScrapFly** | Best success rate on Cloudflare-protected sites |
+
+### Why React + Vite instead of Next.js
+
+This is a **dashboard SPA with a separate Python API backend**. Next.js adds unnecessary complexity:
+- You already have FastAPI — Next.js API routes and server actions are redundant
+- The app is behind auth — zero SEO benefit from SSR
+- All data fetching is client→API (React Query) — RSC provides no advantage
+- Vite HMR is instant; Next.js dev server is slower with App Router
+- Smaller bundle, simpler deployment, faster build times
+- No server/client boundary confusion for the AI editor
+
+---
+
+## REPO STRUCTURE
+
+```
+autoseo/
+├── apps/
+│   ├── web/                    # React + Vite SPA (Cloudflare Pages)
+│   │   ├── src/
+│   │   │   ├── routes/         # React Router file-based routes
+│   │   │   ├── components/     # UI components (shadcn/ui)
+│   │   │   ├── hooks/          # Custom hooks
+│   │   │   ├── lib/            # Utils, API client, auth client
+│   │   │   └── styles/         # Tailwind + CSS variables
+│   │   ├── index.html
+│   │   ├── vite.config.ts
+│   │   └── package.json
+│   └── api/                    # FastAPI backend (Railway)
+│       ├── main.py
+│       ├── routers/
+│       ├── models/
+│       ├── services/
+│       ├── dependencies.py
+│       └── requirements.txt
+├── packages/
+│   ├── crawler/                # Crawl4AI-based crawler service
+│   ├── ai-engine/              # Claude API agent layer
+│   ├── cms-adapters/           # WordPress, Shopify, Webflow, GitHub
+│   └── shared/                 # Pydantic models, encryption, types
+├── workers/
+│   ├── celery_app.py
+│   └── tasks/                  # Crawl, fix, report tasks
+├── infra/
+│   ├── docker-compose.yml      # Local dev: postgres, redis, api, workers
+│   ├── Dockerfile.api
+│   ├── Dockerfile.worker
+│   └── railway.toml
+└── supabase/
+    ├── migrations/
+    └── seed.sql
+```
+
+---
+
+## FRONTEND STACK
+
+```
+Framework:      React 19 + Vite 6
+Routing:        React Router v7 (file-based via plugin)
+Language:       TypeScript (strict)
+Styling:        Tailwind CSS v4 + CSS variables
+Components:     shadcn/ui (Radix primitives)
+Charts:         Recharts
+Tables:         TanStack Table v8 (virtualized)
+Forms:          React Hook Form + Zod
+State:          Zustand (client) + TanStack Query (server)
+Auth:           @supabase/auth-ui-react
+Icons:          Lucide React
+Animations:     Framer Motion
+PDF reports:    @react-pdf/renderer
+API client:     ky (lightweight fetch wrapper) or axios
+```
+
+---
+
+## BACKEND STACK
+
+```
+Framework:      FastAPI 0.115+ (Python 3.12)
+Validation:     Pydantic v2 (strict)
+ORM:            SQLAlchemy 2.0 async + Alembic
+DB driver:      asyncpg (fastest PostgreSQL async)
+Task queue:     Celery 5.4 + Redis
+HTTP client:    httpx (async)
+Auth:           python-jose (JWT verification)
+Crawler:        Crawl4AI 0.8+
+Anti-detect:    Camoufox
+Commercial API: ScrapFly SDK
+AI:             Anthropic Python SDK (claude-sonnet-4-5)
+Embeddings:     Voyage AI (duplicate detection)
+Secrets:        Doppler Python SDK
+Logging:        structlog (JSON → Grafana)
+Testing:        pytest + pytest-asyncio + httpx
+```
+
+---
+
+## INFRASTRUCTURE
+
+```
+Frontend:       Cloudflare Pages (SPA, free tier, global CDN)
+API:            Railway (Docker, auto-deploy from GitHub)
+Workers:        Railway (separate Celery worker service)
+Database:       Supabase (PostgreSQL 15, RLS, realtime, auth, storage)
+Cache + Queue:  Upstash Redis (serverless, pay-per-request)
+File Storage:   Cloudflare R2 (audit snapshots, PDFs, screenshots)
+CDN:            Cloudflare (free tier, DDoS protection)
+Secrets:        Doppler (syncs to Vercel, Railway, local)
+Observability:  Sentry (errors) + Grafana Cloud (metrics)
+Email:          Resend + React Email
+Payments:       Stripe (subscriptions + usage metering)
+CI/CD:          GitHub Actions (test → build → deploy)
+```
+
+---
+
+## SECURITY ARCHITECTURE
+
+```
+Layer 1 — Transport: HTTPS/TLS 1.3 only, HSTS headers, Cloudflare proxy
+Layer 2 — Auth: Supabase JWT (1hr expiry, refresh rotation), OAuth (Google), magic links
+Layer 3 — Authorization: RLS on ALL tables, org_id in JWT claims, least-privilege CMS tokens
+Layer 4 — Encryption: AES-256-GCM for client CMS credentials, per-tenant key derivation
+Layer 5 — API Security: Rate limiting (Redis sliding window, 100 req/min), Pydantic strict, CORS whitelist
+Layer 6 — Audit: Append-only change_log, IP logging, GDPR export/delete from day 1
+```
+
+---
+
+## DATABASE SCHEMA
+
+```sql
+-- ORGANIZATIONS
+CREATE TABLE organizations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  slug        TEXT UNIQUE NOT NULL,
+  plan        TEXT NOT NULL DEFAULT 'starter',
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now(),
+  updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- USERS
+CREATE TABLE users (
+  id          UUID PRIMARY KEY REFERENCES auth.users(id),
+  org_id      UUID REFERENCES organizations(id),
+  role        TEXT NOT NULL DEFAULT 'member',
+  email       TEXT NOT NULL,
+  full_name   TEXT,
+  avatar_url  TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- SITES
+CREATE TABLE sites (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  name          TEXT NOT NULL,
+  domain        TEXT NOT NULL,
+  connection_type TEXT NOT NULL DEFAULT 'crawler',
+  cms_token_encrypted TEXT,
+  cms_token_iv  TEXT,
+  cms_endpoint  TEXT,
+  github_installation_id BIGINT,
+  github_repo   TEXT,
+  github_branch TEXT DEFAULT 'main',
+  snippet_token UUID DEFAULT gen_random_uuid(),
+  gsc_property_url TEXT,
+  gsc_token_encrypted TEXT,
+  crawl_frequency TEXT DEFAULT 'weekly',
+  crawl_max_pages INTEGER DEFAULT 500,
+  respect_robots_txt BOOLEAN DEFAULT true,
+  crawl_delay_ms INTEGER DEFAULT 1000,
+  status        TEXT DEFAULT 'pending',
+  last_crawled_at TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- CRAWLS
+CREATE TABLE crawls (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  status        TEXT DEFAULT 'queued',
+  trigger       TEXT DEFAULT 'scheduled',
+  pages_crawled INTEGER DEFAULT 0,
+  pages_total   INTEGER,
+  issues_found  INTEGER DEFAULT 0,
+  seo_score     SMALLINT,
+  started_at    TIMESTAMPTZ,
+  completed_at  TIMESTAMPTZ,
+  duration_ms   INTEGER,
+  error_message TEXT,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- PAGES
+CREATE TABLE pages (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  crawl_id      UUID REFERENCES crawls(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  url           TEXT NOT NULL,
+  status_code   SMALLINT,
+  redirect_url  TEXT,
+  redirect_chain JSONB,
+  crawl_depth   SMALLINT,
+  response_time_ms INTEGER,
+  title         TEXT,
+  title_length  SMALLINT,
+  meta_description TEXT,
+  meta_description_length SMALLINT,
+  canonical_url TEXT,
+  canonical_chain JSONB,
+  robots_directive TEXT,
+  h1_count      SMALLINT,
+  h1_text       TEXT[],
+  h2_count      SMALLINT,
+  h3_count      SMALLINT,
+  heading_structure JSONB,
+  word_count    INTEGER,
+  content_hash  TEXT,
+  internal_links_count INTEGER,
+  external_links_count INTEGER,
+  broken_links_count INTEGER,
+  incoming_links_count INTEGER,
+  images_count  INTEGER,
+  images_missing_alt INTEGER,
+  images_large  INTEGER,
+  og_title      TEXT,
+  og_description TEXT,
+  og_image      TEXT,
+  twitter_card  TEXT,
+  schema_types  TEXT[],
+  schema_valid  BOOLEAN,
+  schema_errors JSONB,
+  lcp_ms        INTEGER,
+  fid_ms        INTEGER,
+  cls_score     NUMERIC(4,3),
+  ttfb_ms       INTEGER,
+  performance_score SMALLINT,
+  hreflang_tags JSONB,
+  hreflang_errors TEXT[],
+  seo_score     SMALLINT,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- ISSUES
+CREATE TABLE issues (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  crawl_id      UUID REFERENCES crawls(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  page_id       UUID REFERENCES pages(id),
+  type          TEXT NOT NULL,
+  category      TEXT NOT NULL,
+  severity      TEXT NOT NULL,
+  impact_score  SMALLINT NOT NULL,
+  current_value TEXT,
+  fix_type      TEXT NOT NULL DEFAULT 'manual',
+  fix_status    TEXT DEFAULT 'pending',
+  proposed_fix  TEXT,
+  proposed_fix_metadata JSONB,
+  ai_confidence NUMERIC(3,2),
+  applied_at    TIMESTAMPTZ,
+  applied_by    UUID REFERENCES users(id),
+  verified_at   TIMESTAMPTZ,
+  verified_score SMALLINT,
+  rollback_value TEXT,
+  rolled_back_at TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- CHANGE LOG (append-only audit trail)
+CREATE TABLE change_log (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  issue_id      UUID REFERENCES issues(id),
+  action        TEXT NOT NULL,
+  actor_type    TEXT NOT NULL,
+  actor_id      UUID,
+  old_value     TEXT,
+  new_value     TEXT,
+  metadata      JSONB,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- JS SNIPPET EVENTS
+CREATE TABLE snippet_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_id       UUID REFERENCES sites(id) NOT NULL,
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  page_url      TEXT NOT NULL,
+  title         TEXT,
+  meta_description TEXT,
+  canonical_url TEXT,
+  h1_text       TEXT,
+  schema_json   TEXT,
+  lcp_ms        INTEGER,
+  cls_score     NUMERIC(4,3),
+  ttfb_ms       INTEGER,
+  user_agent    TEXT,
+  viewport_width SMALLINT,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- API KEYS
+CREATE TABLE api_keys (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id        UUID REFERENCES organizations(id) NOT NULL,
+  name          TEXT NOT NULL,
+  key_hash      TEXT NOT NULL UNIQUE,
+  key_prefix    TEXT NOT NULL,
+  scopes        TEXT[] NOT NULL,
+  last_used_at  TIMESTAMPTZ,
+  expires_at    TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- INDEXES
+CREATE INDEX idx_pages_crawl_id ON pages(crawl_id);
+CREATE INDEX idx_pages_site_id ON pages(site_id);
+CREATE INDEX idx_pages_org_id ON pages(org_id);
+CREATE INDEX idx_issues_site_id ON issues(site_id);
+CREATE INDEX idx_issues_org_id ON issues(org_id);
+CREATE INDEX idx_issues_fix_status ON issues(fix_status);
+CREATE INDEX idx_issues_site_status ON issues(site_id, fix_status);
+CREATE INDEX idx_crawls_site_id ON crawls(site_id);
+CREATE INDEX idx_crawls_org_id ON crawls(org_id);
+CREATE INDEX idx_change_log_site_id ON change_log(site_id);
+CREATE INDEX idx_snippet_events_site_id ON snippet_events(site_id, created_at DESC);
+
+-- ROW LEVEL SECURITY
+ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE crawls ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE issues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE change_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE snippet_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
+
+-- RLS POLICIES (all tables — org_id from JWT)
+CREATE POLICY "org_isolation_sites" ON sites
+  FOR ALL USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+CREATE POLICY "org_isolation_crawls" ON crawls
+  FOR ALL USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+CREATE POLICY "org_isolation_pages" ON pages
+  FOR ALL USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+CREATE POLICY "org_isolation_issues" ON issues
+  FOR ALL USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+CREATE POLICY "org_isolation_snippets" ON snippet_events
+  FOR ALL USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+CREATE POLICY "org_isolation_api_keys" ON api_keys
+  FOR ALL USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+-- Change log: INSERT + SELECT only, no UPDATE/DELETE
+CREATE POLICY "org_read_changelog" ON change_log
+  FOR SELECT USING (org_id = (auth.jwt() ->> 'org_id')::uuid);
+CREATE POLICY "org_insert_changelog" ON change_log
+  FOR INSERT WITH CHECK (org_id = (auth.jwt() ->> 'org_id')::uuid);
+
+-- JWT CUSTOM CLAIMS (Supabase Edge Function)
+CREATE OR REPLACE FUNCTION public.custom_access_token_hook(event jsonb)
+RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE
+  claims jsonb;
+  user_org_id uuid;
+  user_role text;
+BEGIN
+  claims := event->'claims';
+  SELECT u.org_id, u.role INTO user_org_id, user_role
+  FROM public.users u WHERE u.id = (event->>'user_id')::uuid;
+  claims := jsonb_set(claims, '{org_id}', to_jsonb(user_org_id::text));
+  claims := jsonb_set(claims, '{user_role}', to_jsonb(user_role));
+  RETURN jsonb_set(event, '{claims}', claims);
+END;
+$$;
+```
+
+---
+
+## CRAWLER ARCHITECTURE (4-LAYER)
+
+### Layer Selection Logic
+
+```
+URL received
+    │
+    ├─► Parse robots.txt → if disallowed: log as "not crawlable", skip
+    ├─► Fetch sitemap.xml → seed URL list
+    │
+    ▼
+Try layers in order, fall back on failure:
+
+    ├─► Layer 4: CMS API? (if WordPress/Shopify/Webflow connected) → 99% reliable
+    │
+    ├─► Layer 1: Jina AI Reader (r.jina.ai/URL) → fast, no browser → 85%
+    │   Use for: static HTML sites, blogs, simple WordPress
+    │
+    ├─► Layer 2: Crawl4AI + Camoufox → headless with fingerprint spoof → 70%
+    │   Use for: JS-heavy sites (React, Vue, Next.js SPAs)
+    │
+    └─► Layer 3: ScrapFly API → professional anti-bot bypass → 95%
+        Use for: Cloudflare Turnstile, DataDome, PerimeterX (detected by 403/429/CAPTCHA)
+```
+
+### robots.txt Parser
+
+```python
+# packages/crawler/robots.py
+import httpx
+from urllib.robotparser import RobotFileParser
+from urllib.parse import urljoin
+
+async def get_robots_rules(domain: str, user_agent: str = "AutoSEO") -> RobotFileParser:
+    robots_url = urljoin(domain, "/robots.txt")
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(robots_url, timeout=10)
+            parser = RobotFileParser()
+            parser.parse(resp.text.splitlines())
+            return parser
+        except Exception:
+            return RobotFileParser()  # No robots.txt = all allowed
+
+def is_allowed(parser: RobotFileParser, url: str, user_agent: str = "AutoSEO") -> bool:
+    return parser.can_fetch(user_agent, url)
+
+def get_crawl_delay(parser: RobotFileParser, user_agent: str = "AutoSEO") -> float:
+    delay = parser.crawl_delay(user_agent)
+    return max(delay or 1.0, 1.0)
+```
+
+### Sitemap Parser
+
+```python
+# packages/crawler/sitemap.py
+import httpx, gzip
+from xml.etree import ElementTree
+from typing import AsyncGenerator
+from urllib.parse import urljoin
+
+async def discover_sitemap_urls(domain: str) -> AsyncGenerator[str, None]:
+    sitemap_urls = [
+        urljoin(domain, "/sitemap.xml"),
+        urljoin(domain, "/sitemap_index.xml"),
+        urljoin(domain, "/sitemap-index.xml"),
+    ]
+    seen = set()
+    for sitemap_url in sitemap_urls:
+        async for url in _parse_sitemap(sitemap_url, seen):
+            yield url
+
+async def _parse_sitemap(url: str, seen: set) -> AsyncGenerator[str, None]:
+    if url in seen: return
+    seen.add(url)
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, timeout=30, follow_redirects=True)
+        if resp.status_code != 200: return
+        content = resp.content
+        if url.endswith(".gz"): content = gzip.decompress(content)
+        root = ElementTree.fromstring(content)
+        ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+        for sitemap in root.findall("sm:sitemap/sm:loc", ns):
+            async for u in _parse_sitemap(sitemap.text.strip(), seen): yield u
+        for loc in root.findall("sm:url/sm:loc", ns):
+            yield loc.text.strip()
+```
+
+### Layer 1 — Jina AI Reader
+
+```python
+# packages/crawler/layers/jina_layer.py
+import httpx
+
+async def fetch_with_jina(url: str) -> dict | None:
+    jina_url = f"https://r.jina.ai/{url}"
+    headers = {"Accept": "application/json", "X-Return-Format": "markdown"}
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(jina_url, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            return {"content": data.get("data", {}).get("content", ""),
+                    "title": data.get("data", {}).get("title", ""),
+                    "url": url, "source": "jina"}
+        return None  # Fall through to next layer
+```
+
+### Layer 2 — Crawl4AI + Camoufox
+
+```python
+# packages/crawler/layers/crawl4ai_layer.py
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig
+from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
+from crawl4ai.deep_crawling.filters import FilterChain, SEOFilter
+
+async def crawl_with_crawl4ai(url: str, max_pages: int = 500) -> list[dict]:
+    browser_config = BrowserConfig(
+        browser_type="firefox", headless=True,
+        use_managed_browser=True,
+        extra_args=["--no-sandbox", "--disable-dev-shm-usage"]
+    )
+    crawl_config = CrawlerRunConfig(
+        deep_crawl_strategy=BFSDeepCrawlStrategy(
+            max_depth=5, max_pages=max_pages,
+            include_external=False,
+            filter_chain=FilterChain([SEOFilter(threshold=0.3)])
+        ),
+        mean_delay=1.5, max_range=0.5,
+        word_count_threshold=10,
+        exclude_external_links=True,
+        wait_for="networkidle", page_timeout=30000,
+    )
+    pages = []
+    async with AsyncWebCrawler(config=browser_config) as crawler:
+        results = await crawler.arun(url=url, config=crawl_config)
+        for result in results:
+            if result.success:
+                pages.append({"url": result.url, "html": result.html,
+                              "markdown": result.markdown.raw_markdown,
+                              "status_code": result.status_code, "source": "crawl4ai"})
+    return pages
+```
+
+### Layer 3 — ScrapFly
+
+```python
+# packages/crawler/layers/scrapfly_layer.py
+from scrapfly import ScrapflyClient, ScrapeConfig, ScrapeApiResponse
+
+client = ScrapflyClient(key=settings.SCRAPFLY_API_KEY)
+
+BLOCKED_SIGNALS = ["Just a moment", "Checking your browser",
+                   "cf-browser-verification", "DDoS protection by Cloudflare", "datadome"]
+
+def is_blocked(html: str) -> bool:
+    return any(s.lower() in html.lower() for s in BLOCKED_SIGNALS)
+
+async def fetch_with_scrapfly(url: str) -> dict | None:
+    try:
+        result = await client.async_scrape(ScrapeConfig(
+            url=url, asp=True, render_js=True,
+            rendering_wait=2000, country="US", retry=False
+        ))
+        if result.upstream_status_code == 200:
+            return {"url": url, "html": result.scrape_result["content"],
+                    "status_code": 200, "source": "scrapfly"}
+        return None
+    except Exception:
+        return None
+```
+
+### Layer 4 — JS Snippet (Client Installs Once)
+
+```javascript
+// packages/snippet/snippet.js (~3KB minified)
+// Embed: <script src="https://cdn.autoseo.com/snippet.js" data-token="SITE_TOKEN" async></script>
+(function() {
+  const token = document.currentScript.getAttribute('data-token');
+  const endpoint = 'https://api.autoseo.com/snippet/collect';
+  function collect() {
+    const data = {
+      token, url: window.location.href,
+      title: document.title,
+      meta_description: document.querySelector('meta[name="description"]')?.content || null,
+      canonical: document.querySelector('link[rel="canonical"]')?.href || null,
+      h1: document.querySelector('h1')?.innerText || null,
+      schema: Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+               .map(s => s.textContent).join('\n'),
+      og_title: document.querySelector('meta[property="og:title"]')?.content || null,
+      og_image: document.querySelector('meta[property="og:image"]')?.content || null,
+    };
+    if ('PerformanceObserver' in window) {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.entryType === 'largest-contentful-paint')
+            data.lcp = Math.round(entry.startTime);
+        }
+      }).observe({ type: 'largest-contentful-paint', buffered: true });
+    }
+    navigator.sendBeacon(endpoint, JSON.stringify(data));
+  }
+  if (document.readyState === 'complete') collect();
+  else window.addEventListener('load', collect);
+  // SPA navigation support (React Router, Next.js, etc.)
+  let lastUrl = location.href;
+  new MutationObserver(() => {
+    if (location.href !== lastUrl) { lastUrl = location.href; setTimeout(collect, 1000); }
+  }).observe(document.querySelector('body'), { childList: true, subtree: true });
+})();
+```
+
+### SEO Signal Extractor
+
+```python
+# packages/crawler/extractor.py
+from bs4 import BeautifulSoup
+import json, re
+from urllib.parse import urlparse
+
+class SEOExtractor:
+    def __init__(self, html: str, url: str):
+        self.soup = BeautifulSoup(html, "lxml")
+        self.url = url
+        self.base_domain = urlparse(url).netloc
+
+    def extract_all(self) -> dict:
+        return {**self._meta(), **self._headings(), **self._links(),
+                **self._images(), **self._schema(), **self._social(),
+                **self._technical()}
+
+    def _meta(self) -> dict:
+        title = self.soup.find("title")
+        desc = self.soup.find("meta", attrs={"name": "description"})
+        canonical = self.soup.find("link", attrs={"rel": "canonical"})
+        robots = self.soup.find("meta", attrs={"name": "robots"})
+        t = title.get_text(strip=True) if title else None
+        d = desc.get("content", "").strip() if desc else None
+        return {"title": t, "title_length": len(t) if t else 0,
+                "meta_description": d, "meta_description_length": len(d) if d else 0,
+                "canonical_url": canonical.get("href") if canonical else None,
+                "robots_directive": robots.get("content") if robots else "index, follow"}
+
+    def _headings(self) -> dict:
+        h1s = self.soup.find_all("h1")
+        return {"h1_count": len(h1s),
+                "h1_text": [h.get_text(strip=True) for h in h1s],
+                "h2_count": len(self.soup.find_all("h2")),
+                "h3_count": len(self.soup.find_all("h3"))}
+
+    def _links(self) -> dict:
+        links = self.soup.find_all("a", href=True)
+        internal = [l for l in links if urlparse(l["href"]).netloc in ("", self.base_domain)]
+        external = [l for l in links if urlparse(l["href"]).netloc not in ("", self.base_domain)]
+        return {"internal_links_count": len(internal),
+                "external_links_count": len(external)}
+
+    def _images(self) -> dict:
+        imgs = self.soup.find_all("img")
+        return {"images_count": len(imgs),
+                "images_missing_alt": sum(1 for i in imgs if not i.get("alt"))}
+
+    def _schema(self) -> dict:
+        schemas, types, errors = [], [], []
+        for s in self.soup.find_all("script", type="application/ld+json"):
+            try:
+                data = json.loads(s.string or "")
+                schemas.append(data)
+                if "@type" in data: types.append(data["@type"])
+            except json.JSONDecodeError as e:
+                errors.append(str(e))
+        return {"schema_types": types, "schema_valid": len(errors) == 0,
+                "schema_errors": errors}
+
+    def _social(self) -> dict:
+        def og(p): t = self.soup.find("meta", attrs={"property": f"og:{p}"}); return t.get("content") if t else None
+        def tw(n): t = self.soup.find("meta", attrs={"name": f"twitter:{n}"}); return t.get("content") if t else None
+        return {"og_title": og("title"), "og_description": og("description"),
+                "og_image": og("image"), "twitter_card": tw("card")}
+
+    def _technical(self) -> dict:
+        hreflang = self.soup.find_all("link", attrs={"rel": "alternate", "hreflang": True})
+        return {"hreflang_tags": [{"lang": t.get("hreflang"), "href": t.get("href")} for t in hreflang],
+                "word_count": len(self.soup.get_text().split())}
+```
+
+### Crawl Orchestrator
+
+```python
+# workers/tasks/crawl.py
+from celery import shared_task
+import asyncio
+
+@shared_task(bind=True, max_retries=3)
+def run_site_crawl(self, site_id: str, crawl_id: str):
+    asyncio.run(_async_crawl(site_id, crawl_id))
+
+async def _async_crawl(site_id: str, crawl_id: str):
+    site = await db.get_site(site_id)
+    await db.update_crawl(crawl_id, status="running", started_at=now())
+    try:
+        # Step 1: robots.txt
+        robots = await get_robots_rules(site.domain)
+        delay = get_crawl_delay(robots)
+        # Step 2: sitemap seed
+        sitemap_urls = [url async for url in discover_sitemap_urls(site.domain)]
+        # Step 3: Select crawl method
+        if site.connection_type in ("wordpress", "webflow", "shopify"):
+            pages = await crawl_via_cms_api(site)
+        else:
+            pages = await crawl_with_tiered_crawler(site.domain, robots, site.crawl_max_pages)
+        # Step 4: Extract SEO signals
+        extracted = []
+        for page_data in pages:
+            signals = SEOExtractor(page_data["html"], page_data["url"]).extract_all()
+            lighthouse = await get_lighthouse_data(page_data["url"])
+            signals.update(lighthouse)
+            signals["seo_score"] = calculate_page_score(signals)
+            extracted.append(signals)
+        # Step 5: Cross-page analysis
+        extracted = detect_duplicates(extracted)
+        extracted = analyze_internal_links(extracted)
+        # Step 6: Save
+        await db.bulk_insert_pages(crawl_id, site_id, extracted)
+        issues = generate_issues(extracted)
+        await db.bulk_insert_issues(crawl_id, site_id, issues)
+        # Step 7: Trigger AI analysis
+        run_ai_analysis.delay(crawl_id, site_id)
+        # Step 8: Complete
+        await db.update_crawl(crawl_id, status="completed",
+            completed_at=now(), pages_crawled=len(extracted),
+            issues_found=len(issues), seo_score=calculate_site_score(extracted))
+    except Exception as e:
+        await db.update_crawl(crawl_id, status="failed", error_message=str(e))
+        raise
+```
+
+---
+
+## CREDENTIAL ENCRYPTION
+
+```python
+# packages/shared/encryption.py
+import os, base64, hmac, hashlib
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+MASTER_KEY = bytes.fromhex(os.environ["DOPPLER_MASTER_ENCRYPTION_KEY"])
+
+def derive_tenant_key(org_id: str) -> bytes:
+    return hmac.new(MASTER_KEY, org_id.encode(), hashlib.sha256).digest()
+
+def encrypt_credential(org_id: str, plaintext: str) -> tuple[str, str]:
+    key = derive_tenant_key(org_id)
+    nonce = os.urandom(12)
+    ct = AESGCM(key).encrypt(nonce, plaintext.encode(), None)
+    return base64.b64encode(ct).decode(), base64.b64encode(nonce).decode()
+
+def decrypt_credential(org_id: str, ciphertext_b64: str, nonce_b64: str) -> str:
+    key = derive_tenant_key(org_id)
+    return AESGCM(key).decrypt(base64.b64decode(nonce_b64),
+                               base64.b64decode(ciphertext_b64), None).decode()
+```
+
+---
+
+## FASTAPI APP STRUCTURE
+
+```python
+# apps/api/main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import sentry_sdk
+
+sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
+app = FastAPI(title="AutoSEO API", version="1.0.0")
+
+app.add_middleware(CORSMiddleware,
+    allow_origins=[settings.FRONTEND_URL],
+    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+app.include_router(auth_router, prefix="/auth")
+app.include_router(sites_router, prefix="/sites")
+app.include_router(crawls_router, prefix="/crawls")
+app.include_router(issues_router, prefix="/issues")
+app.include_router(fixes_router, prefix="/fixes")
+app.include_router(snippet_router, prefix="/snippet")
+app.include_router(webhooks_router, prefix="/webhooks")
+
+@app.get("/health")
+async def health(): return {"status": "ok"}
+```
+
+---
+
+## CELERY WORKER
+
+```python
+# workers/celery_app.py
+from celery import Celery
+
+app = Celery("autoseo", broker=settings.REDIS_URL, backend=settings.REDIS_URL,
+    include=["workers.tasks.crawl", "workers.tasks.fix", "workers.tasks.report"])
+
+app.conf.update(
+    task_serializer="json", result_expires=3600,
+    worker_max_tasks_per_child=50,
+    task_soft_time_limit=1800, task_time_limit=3600,
+    worker_prefetch_multiplier=1,
+)
+
+from celery.schedules import crontab
+app.conf.beat_schedule = {
+    "weekly-crawls": {"task": "workers.tasks.crawl.run_scheduled_crawls",
+                      "schedule": crontab(hour=2, minute=0)},
+    "refresh-tokens": {"task": "workers.tasks.auth.refresh_expiring_tokens",
+                       "schedule": crontab(hour=1, minute=0)},
+}
+```
+
+---
+
+## DOCKER SETUP
+
+```yaml
+# infra/docker-compose.yml
+version: "3.8"
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: autoseo_dev
+      POSTGRES_USER: autoseo
+      POSTGRES_PASSWORD: devpassword
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  api:
+    build: { context: "..", dockerfile: "infra/Dockerfile.api" }
+    ports: ["8000:8000"]
+    env_file: .env
+    depends_on: [postgres, redis]
+    volumes: ["../apps/api:/app"]
+
+  worker:
+    build: { context: "..", dockerfile: "infra/Dockerfile.worker" }
+    env_file: .env
+    depends_on: [postgres, redis]
+    volumes: ["../workers:/app/workers", "../packages:/app/packages"]
+
+volumes:
+  pgdata:
+```
+
+```dockerfile
+# infra/Dockerfile.worker
+FROM python:3.12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    firefox-esr wget && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY apps/api/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN crawl4ai-setup
+COPY . .
+CMD ["celery", "-A", "workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+```
+
+---
+
+## GAPS ADDRESSED (from critical analysis)
+
+These items were missing from previous versions and are now integrated:
+
+| Gap | Where Addressed |
+|---|---|
+| robots.txt compliance | Crawler architecture, robots.py |
+| sitemap.xml as seed list | Crawler architecture, sitemap.py |
+| Canonical chain detection | pages.canonical_chain column, extractor |
+| Redirect chain detection | pages.redirect_chain column, orchestrator |
+| hreflang bidirectional validation | pages.hreflang_tags/errors columns |
+| JS-injected meta tags | Crawl4AI with JS rendering enabled for ALL pages |
+| Duplicate content detection | pages.content_hash (SimHash), detect_duplicates() |
+| Internal link equity | pages.incoming_links_count, analyze_internal_links() |
+| Schema validation | extractor._schema(), issues generation |
+| Social meta tags | extractor._social(), pages columns |
+| HTTPS/security headers | Included in SEO signals checklist |
+| Client site down during crawl | Orchestrator retry with exponential backoff |
+| CMS auto-reverts changes | Fix verification (re-fetch after write) |
+| Large sites (50k+ pages) | sitemap-first prioritization, crawl_max_pages |
+| AI hallucination guard | ai_confidence score, validation pipeline, human approval |
+| Token refresh | Celery beat task for OAuth token refresh |
+| SPA navigation for JS snippet | MutationObserver for URL changes |
+| Compound indexes | DB schema indexes section |
+| Complete RLS policies | All tables have org_isolation policies |
+| Health check endpoint | /health on FastAPI app |
+| Docker for Crawl4AI/Camoufox | Dockerfile.worker with firefox-esr + crawl4ai-setup |
+
+---
+
+## SEO SIGNALS CHECKLIST (complete list to audit per page)
+
+```
+META: title, title_length, meta_description, meta_description_length,
+      canonical_url, robots_directive, viewport
+
+HEADINGS: h1_count, h1_text, h2_count, h3_count, heading_structure
+
+IMAGES: images_count, images_missing_alt, images_large (>200KB)
+
+LINKS: internal_links_count, external_links_count, broken_links_count,
+       incoming_links_count, crawl_depth
+
+SCHEMA: schema_types, schema_valid, schema_errors
+
+SOCIAL: og_title, og_description, og_image, twitter_card
+
+PERFORMANCE: lcp_ms, fid_ms, cls_score, ttfb_ms, performance_score
+
+HREFLANG: hreflang_tags, hreflang_errors
+
+CONTENT: word_count, content_hash (SimHash for duplicate detection)
+
+TECHNICAL: https, mixed_content, x_robots_tag, hsts,
+           favicon, apple_touch_icon, web_manifest
+```
+
+---
+
+## CODING CHECKLIST (AI Editor — Execute In Order)
+
+### Phase 1: Foundation (Week 1–2)
+```
+[ ] Create monorepo (apps/web, apps/api, packages/, workers/, infra/, supabase/)
+[ ] Set up React + Vite app with TypeScript, Tailwind, shadcn/ui
+[ ] Set up FastAPI app with routers, Pydantic models, health endpoint
+[ ] Configure Docker Compose (postgres, redis, api, worker)
+[ ] Set up Supabase project, run all migrations from schema above
+[ ] Enable RLS on all tables, add JWT custom claims Edge Function
+[ ] Configure Doppler secrets for all environments
+[ ] Set up GitHub Actions CI/CD (lint, test, deploy)
+[ ] Set up Stripe (products, prices, webhook endpoint)
+[ ] Create GitHub App (Contents R/W, PRs R/W, Metadata R)
+[ ] Implement encryption utils (AES-256-GCM, per-tenant keys)
+[ ] Implement user registration → org creation flow
+[ ] Implement Stripe subscription provisioning
+[ ] Build site add flow (URL → detect CMS → guide connection)
+[ ] Build auth UI (login, signup, magic link) with Supabase Auth
+[ ] Write 20 unit tests for encryption, auth, DB queries
+```
+
+### Phase 2: Smart Crawler (Week 3–5)
+```
+[ ] Install Crawl4AI, Camoufox, ScrapFly SDK in worker Docker image
+[ ] Build robots.txt parser + compliance checker
+[ ] Build sitemap.xml parser (including gzipped, nested)
+[ ] Build Layer 1: Jina AI Reader integration
+[ ] Build Layer 2: Crawl4AI + Camoufox full-site crawler
+[ ] Build Layer 3: ScrapFly fallback (triggered on 403/429/block detection)
+[ ] Build Layer 4: JS Snippet (snippet.js + /snippet/collect endpoint)
+[ ] Build SEO Signal Extractor (all fields from checklist above)
+[ ] Build PageSpeed Insights API integration
+[ ] Build duplicate content detector (SimHash on content_hash)
+[ ] Build internal link graph analyzer (incoming_links_count per page)
+[ ] Build crawl orchestrator Celery task (with retry, error handling)
+[ ] Build issue generator (maps signals → issues with severity + impact_score)
+[ ] Build SEO score calculator (weighted formula per signal)
+[ ] Add crawl progress SSE endpoint for real-time UI updates
+[ ] Test full crawl on 5 different sites (WordPress, Next.js, Shopify, static, SPA)
+[ ] Write integration tests for all 4 crawl layers
+```
+
+### Phase 3: AI Analysis + Fix Generation (Week 5–7)
+```
+[ ] Design Claude prompt for issue analysis and fix generation
+[ ] Build confidence scoring (0.00–1.00) per fix suggestion
+[ ] Build validation pipeline (schema validator, URL checker, HTML sanitizer)
+[ ] Build AI content safety detector (competitor names, medical/legal/financial)
+[ ] Connect Claude vision API for image alt text generation
+[ ] Build staging-first enforcement (NEVER write to production directly)
+[ ] Build before/after snapshot system (rollback_value on every issue)
+[ ] Build one-click rollback per fix
+[ ] Build human approval UI (diff view, approve/reject buttons)
+[ ] Wire up AI auto-fix for: meta titles, descriptions, alt text, schema, canonical
+[ ] Build fix verification (re-fetch page after CMS write, confirm change applied)
+[ ] Build CMS-reverts-changes detection (if write succeeds but re-fetch shows old value)
+[ ] Write prompt tests with 10 real-world SEO issues
+```
+
+### Phase 4: CMS Integrations (Week 7–10)
+```
+[ ] WordPress: Application Password OAuth flow
+[ ] WordPress: Read pages, posts, Yoast/Rank Math meta fields
+[ ] WordPress: Write meta title, description, alt text via REST API
+[ ] WordPress: Detect active SEO plugin (Yoast vs Rank Math vs SEOPress)
+[ ] WordPress: Detect page builders (Elementor, Divi — read-only, flag as limitation)
+[ ] WordPress: Rate limit handling (queued, 100 req/min)
+[ ] WordPress: Version detect (WP 7.0 Connectors API awareness)
+[ ] Shopify: Custom App OAuth flow
+[ ] Shopify: Read products, pages, metafields via GraphQL
+[ ] Shopify: Write product meta, page meta, alt text
+[ ] Shopify: Rate limit handling (GraphQL 4 pts/sec, retry with backoff)
+[ ] Webflow: OAuth token flow
+[ ] Webflow: Read/write CMS collection items, SEO fields
+[ ] All: Log every write to change_log table
+[ ] All: Test on real staging sites
+```
+
+### Phase 5: GitHub Integration (Week 10–12)
+```
+[ ] GitHub App installation flow
+[ ] File reader (get repo tree, identify where SEO tags live)
+[ ] AI code editor (modify ONLY specific lines — never rewrite whole files)
+[ ] PR creator with description template (what changed, why, expected impact)
+[ ] Vercel preview URL detection from PR
+[ ] Auto Lighthouse audit on preview URL
+[ ] Compare preview score vs baseline → attach to PR as comment
+[ ] Handle PR merge event → mark issue as "deployed"
+```
+
+### Phase 6: Dashboard + Reports (Week 12–14)
+```
+[ ] SEO score history chart (Recharts, 30/90/365 day views)
+[ ] Issue table (TanStack Table, filterable by severity/category/status)
+[ ] Fix history timeline
+[ ] Crawl progress real-time view (SSE connection)
+[ ] Site health summary cards
+[ ] Weekly email digest (React Email template via Resend)
+[ ] PDF report generator (@react-pdf/renderer)
+[ ] Slack webhook notifications
+[ ] Scheduled re-audit settings UI
+[ ] API key management UI
+```
+
+### Phase 7: Beta + Launch (Week 14–18)
+```
+[ ] Onboarding flow (add site → connect CMS or install snippet → first crawl)
+[ ] 3 free beta users — document every result
+[ ] Stripe subscription enforcement (check plan limits before each crawl)
+[ ] Terms of Service + Privacy Policy + DPA (legal review)
+[ ] Landing page (on Cloudflare Pages, separate from dashboard)
+[ ] Error monitoring and alerting (Sentry → Slack)
+[ ] Load test: crawl 10 sites simultaneously
+[ ] Fix verification rate tracking (% of fixes that stick vs get reverted)
+```
+
+---
+
+## HONEST TIMELINE (SOLO DEVELOPER)
+
+| Phase | Description | Time |
+|---|---|---|
+| Phase 1 | Foundation setup | 2 weeks |
+| Phase 2 | Smart crawler (4 layers) | 4 weeks |
+| Phase 3 | AI analysis + fixes | 3 weeks |
+| **MVP** | **Audit-only launch (no auto-fix)** | **Week 7** |
+| Phase 4 | CMS integrations | 4 weeks |
+| Phase 5 | GitHub integration | 3 weeks |
+| Phase 6 | Dashboard + reports | 3 weeks |
+| Phase 7 | Beta + launch | 4 weeks |
+| **TOTAL** | | **~23 weeks** |
+
+With 2 developers: **~14 weeks total, MVP at week 4**
+
+---
+
+## ENVIRONMENT VARIABLES (Doppler)
+
+```
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_ANON_KEY=
+ANTHROPIC_API_KEY=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+REDIS_URL=
+CLOUDFLARE_R2_ACCESS_KEY=
+CLOUDFLARE_R2_SECRET_KEY=
+CLOUDFLARE_R2_BUCKET=
+DOPPLER_MASTER_ENCRYPTION_KEY=
+SCRAPFLY_API_KEY=
+RESEND_API_KEY=
+SENTRY_DSN=
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+FRONTEND_URL=http://localhost:5173
+```
+
+---
+
+## DO NOT BUILD UNTIL 20 PAYING CUSTOMERS
+
+- Competitor tracking
+- A/B meta title testing
+- Chrome extension
+- Content brief generator
+- White-label agency platform
+- Mobile app
+- Custom LLM models
+- Deploy guard
+
+---
+
+*End of Document — Version 3.0 — Single source of truth for the AutoSEO build*
