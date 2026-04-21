@@ -57,20 +57,27 @@ async def trigger_crawl(
 
     # Dispatch the crawl: prefer Celery (production) but fall back to in-process
     # background task when no Redis broker is configured (dev / single-server).
+    import sys, pathlib, logging
+    log = logging.getLogger("autoseo.dispatch")
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
     site_id_str = str(site.id)
     crawl_id_str = str(crawl.id)
     try:
         if os.environ.get("REDIS_URL"):
             from workers.tasks.crawl import run_site_crawl
             run_site_crawl.delay(site_id_str, crawl_id_str)
+            log.info("crawl_dispatched_celery crawl_id=%s", crawl_id_str)
         else:
-            import sys, pathlib
-            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
             from workers.tasks.crawl import _async_crawl
             background_tasks.add_task(_async_crawl, site_id_str, crawl_id_str)
-    except Exception:
-        # Don't fail the API call if dispatch hiccups — crawl row stays queued
-        pass
+            log.info("crawl_dispatched_background crawl_id=%s", crawl_id_str)
+    except Exception as e:
+        # Mark crawl as failed so the user gets feedback instead of an eternal "queued"
+        log.exception("crawl_dispatch_failed crawl_id=%s err=%s", crawl_id_str, e)
+        crawl.status = "failed"
+        crawl.error_message = f"Dispatch failed: {e}"
+        await db.commit()
+        await db.refresh(crawl)
 
     return crawl
 

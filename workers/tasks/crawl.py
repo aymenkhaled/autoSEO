@@ -21,9 +21,38 @@ import structlog
 # Ensure packages are importable from the workers directory
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from workers.celery_app import app
-
 logger = structlog.get_logger()
+
+# Celery is optional — only required for production worker mode.
+# In dev (no REDIS_URL) the API dispatches via FastAPI BackgroundTasks
+# and never imports celery. We provide a no-op decorator so module import
+# always succeeds.
+try:
+    from workers.celery_app import app  # type: ignore
+    _CELERY_AVAILABLE = True
+except Exception:  # ImportError if celery missing, or any config error
+    _CELERY_AVAILABLE = False
+
+    class _NoopTask:
+        def __init__(self, fn):
+            self.fn = fn
+        def __call__(self, *a, **kw):
+            return self.fn(*a, **kw)
+        def delay(self, *a, **kw):
+            logger.warning("celery_unavailable_skipping_dispatch", task=self.fn.__name__)
+        def retry(self, *a, **kw):
+            raise RuntimeError("Celery retry called outside of Celery worker")
+
+    class _NoopApp:
+        def task(self, *a, **kw):
+            def deco(fn):
+                return _NoopTask(fn)
+            # support both @app.task and @app.task(bind=True, ...)
+            if a and callable(a[0]) and not kw:
+                return _NoopTask(a[0])
+            return deco
+
+    app = _NoopApp()  # type: ignore
 
 MAX_CONCURRENT_FETCHES = 5  # Gap 3
 
