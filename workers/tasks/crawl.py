@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -80,8 +81,27 @@ async def _check_cancelled(db, crawl_id: str) -> bool:
     return bool(row and row[0] == "cancelling")
 
 
+def _looks_like_spa_shell(html: str) -> bool:
+    """Quick HTML check: framework root marker + tiny rendered text."""
+    if not html:
+        return False
+    h = html.lower()
+    has_marker = any(m in h for m in (
+        'id="root"', "id='root'", 'id="app"', "id='app'",
+        'id="__next"', 'id="__nuxt"', 'data-reactroot', 'ng-app=',
+    ))
+    if not has_marker:
+        return False
+    # Strip tags & whitespace; if <50 words remain, it's almost certainly an unrendered shell
+    text = re.sub(r"<script[\s\S]*?</script>", " ", html, flags=re.I)
+    text = re.sub(r"<style[\s\S]*?</style>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    words = re.findall(r"\b\w+\b", text)
+    return len(words) < 50
+
+
 async def _fetch_one(url: str, semaphore: asyncio.Semaphore, delay: float) -> dict | None:
-    """Try Layer 1 (Jina) → Layer 3 (ScrapFly fallback if blocked)."""
+    """Try Layer 1 (Jina) → Layer 3 (ScrapFly with JS rendering) if blocked OR SPA shell."""
     from packages.crawler.layers.jina_layer import fetch_with_jina
     from packages.crawler.layers.scrapfly_layer import fetch_with_scrapfly, is_blocked
 
@@ -95,12 +115,22 @@ async def _fetch_one(url: str, semaphore: asyncio.Semaphore, delay: float) -> di
         except Exception as e:
             logger.debug("jina_fetch_failed", url=url, error=str(e))
 
-        # Fall back to ScrapFly if Jina returned blocked content or failed
-        if not page_data or (page_data.get("html") and is_blocked(page_data.get("html", ""))):
+        # Fall back to ScrapFly (renders JS) when:
+        # 1. Jina failed entirely
+        # 2. Jina returned a blocked page (Cloudflare, DataDome, etc.)
+        # 3. Jina returned an unrendered SPA shell (insight from user feedback)
+        needs_fallback = (
+            not page_data
+            or (page_data.get("html") and is_blocked(page_data.get("html", "")))
+            or (page_data.get("html") and _looks_like_spa_shell(page_data.get("html", "")))
+        )
+        if needs_fallback:
             try:
                 fallback = await fetch_with_scrapfly(url)
-                if fallback:
-                    page_data = fallback
+                if fallback and fallback.get("html"):
+                    # Only use fallback if it actually rendered MORE content
+                    if not _looks_like_spa_shell(fallback["html"]) or not page_data:
+                        page_data = fallback
             except Exception as e:
                 logger.debug("scrapfly_fetch_failed", url=url, error=str(e))
 

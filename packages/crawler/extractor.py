@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
+from datetime import date, datetime
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -67,7 +69,7 @@ class SEOExtractor:
         self.headers = {str(k).lower(): str(v) for k, v in (headers or {}).items()}
 
     def extract_all(self) -> dict:
-        return {
+        signals = {
             **self._meta(),
             **self._headings(),
             **self._links(),
@@ -77,6 +79,36 @@ class SEOExtractor:
             **self._technical(),
             **self._http_headers(),
         }
+        signals["is_spa_shell"] = self._detect_spa_shell(signals)
+        return signals
+
+    def _detect_spa_shell(self, signals: dict) -> bool:
+        """Detect an unrendered client-side SPA (React/Vue/Next/Angular).
+
+        Other agent's feedback: 'crawler sees empty <div id="root">' on SPAs.
+        When this is true, downstream missing-h1/thin-content issues are
+        symptoms of one root cause, not 17 separate problems.
+        """
+        body = self.soup.find("body")
+        if not body:
+            return False
+        # Look for framework root markers
+        markers = (
+            ("div", {"id": "root"}),
+            ("div", {"id": "app"}),
+            ("div", {"id": "__next"}),
+            ("div", {"id": "__nuxt"}),
+            ("div", {"data-reactroot": True}),
+        )
+        has_marker = any(self.soup.find(tag, attrs) for tag, attrs in markers)
+        if not has_marker:
+            # Also catch generic ng-app or vue-style roots
+            has_marker = bool(self.soup.find(attrs={"ng-app": True})) or "data-v-app" in str(body)[:2000]
+
+        word_count = signals.get("word_count", 0)
+        h1_count = signals.get("h1_count", 0)
+        # Shell heuristic: framework marker + almost no rendered content
+        return bool(has_marker and word_count < 50 and h1_count == 0)
 
     def _meta(self) -> dict:
         title_tag = self.soup.find("title")
@@ -191,10 +223,17 @@ class SEOExtractor:
                             types.extend(t if isinstance(t, list) else [t])
             except (json.JSONDecodeError, ValueError) as e:
                 errors.append(str(e))
+
+        # Detect stale offer dates (priceValidUntil in the past)
+        stale_dates: list[str] = []
+        for d in schemas:
+            stale_dates.extend(_find_stale_offer_dates(d))
+
         return {
             "schema_types": [str(t) for t in types],
             "schema_valid": len(errors) == 0,
             "schema_errors": errors if errors else None,
+            "stale_offer_dates": stale_dates if stale_dates else None,
         }
 
     def _social(self) -> dict:
@@ -235,6 +274,33 @@ class SEOExtractor:
             "cache_control": h.get("cache-control"),
             "http_canonical": _parse_link_header_canonical(h.get("link")),
         }
+
+
+def _find_stale_offer_dates(node, found: list[str] | None = None) -> list[str]:
+    """Walk a JSON-LD tree looking for past priceValidUntil/validThrough dates."""
+    if found is None:
+        found = []
+    today = date.today()
+    if isinstance(node, dict):
+        for key in ("priceValidUntil", "validThrough", "validUntil"):
+            v = node.get(key)
+            if isinstance(v, str):
+                # Try ISO 8601 (YYYY-MM-DD or full datetime)
+                try:
+                    parsed = datetime.fromisoformat(v.replace("Z", "+00:00")).date()
+                except ValueError:
+                    try:
+                        parsed = datetime.strptime(v[:10], "%Y-%m-%d").date()
+                    except ValueError:
+                        continue
+                if parsed < today:
+                    found.append(f"{key}={v}")
+        for v in node.values():
+            _find_stale_offer_dates(v, found)
+    elif isinstance(node, list):
+        for v in node:
+            _find_stale_offer_dates(v, found)
+    return found
 
 
 def _parse_link_header_canonical(link_header: str | None) -> str | None:
@@ -320,6 +386,28 @@ def generate_issues(pages: list[dict]) -> list[dict]:
         page_id = page.get("_page_id")
         status = page.get("status_code", 200) or 200
         page_type = page.get("page_type") or classify_page_type(url, page.get("schema_types"))
+        is_shell = page.get("is_spa_shell", False)
+
+        # SPA shell: emit ONE root-cause issue and skip the symptoms (missing h1,
+        # thin content, missing meta) since they're all caused by the same thing.
+        if is_shell:
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "spa_no_prerender", "category": "rendering",
+                "severity": "critical", "impact_score": 95,
+                "current_value": "Page is a client-rendered SPA shell — crawlers see empty HTML",
+                "fix_type": "manual",
+            })
+            # Stale offer dates can still be detected (they're in raw HTML), continue with those only
+            for stale in (page.get("stale_offer_dates") or []):
+                issues.append({
+                    "page_id": page_id, "url": url,
+                    "type": "stale_schema_date", "category": "schema",
+                    "severity": "medium", "impact_score": 40,
+                    "current_value": stale,
+                    "fix_type": "auto",
+                })
+            continue
 
         # Gap 8: HTTP status code issues take precedence
         if status in (404, 410):
@@ -488,4 +576,72 @@ def generate_issues(pages: list[dict]) -> list[dict]:
                 "fix_type": "manual",
             })
 
+        # Stale offer dates from JSON-LD
+        for stale in (page.get("stale_offer_dates") or []):
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "stale_schema_date", "category": "schema",
+                "severity": "medium", "impact_score": 40,
+                "current_value": stale,
+                "fix_type": "auto",
+            })
+
+    # Site-wide aggregate detection: dedupe symptoms into one root-cause issue
+    issues.extend(detect_sitewide_duplicates(pages))
+
     return issues
+
+
+def detect_sitewide_duplicates(pages: list[dict]) -> list[dict]:
+    """Aggregate identical titles / meta descriptions across pages.
+
+    The other agent's feedback: 'every single page on your site uses the exact
+    same title' — that should surface as ONE high-impact issue with the list of
+    affected URLs, not 17 separate copies of `title_too_long`.
+    """
+    aggregate: list[dict] = []
+
+    # Group by normalized title
+    by_title: dict[str, list[dict]] = defaultdict(list)
+    by_meta: dict[str, list[dict]] = defaultdict(list)
+    for p in pages:
+        if p.get("is_spa_shell"):
+            continue  # SPA shells trivially share the same shell HTML
+        t = (p.get("title") or "").strip().lower()
+        if t:
+            by_title[t].append(p)
+        m = (p.get("meta_description") or "").strip().lower()
+        if m:
+            by_meta[m].append(p)
+
+    for title, group in by_title.items():
+        if len(group) >= 2:
+            urls = [g.get("url", "") for g in group]
+            aggregate.append({
+                "page_id": group[0].get("_page_id"),
+                "url": group[0].get("url", ""),
+                "type": "duplicate_title",
+                "category": "meta",
+                "severity": "high" if len(group) >= 5 else "medium",
+                "impact_score": min(60 + len(group) * 2, 90),
+                "current_value": f"{len(group)} pages share this title: {title[:80]}",
+                "fix_type": "manual",
+                "_affected_urls": urls,
+            })
+
+    for meta, group in by_meta.items():
+        if len(group) >= 2:
+            urls = [g.get("url", "") for g in group]
+            aggregate.append({
+                "page_id": group[0].get("_page_id"),
+                "url": group[0].get("url", ""),
+                "type": "duplicate_meta_description",
+                "category": "meta",
+                "severity": "medium",
+                "impact_score": min(40 + len(group) * 2, 70),
+                "current_value": f"{len(group)} pages share this meta description",
+                "fix_type": "manual",
+                "_affected_urls": urls,
+            })
+
+    return aggregate
