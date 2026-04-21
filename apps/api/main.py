@@ -46,6 +46,17 @@ async def lifespan(app: FastAPI):
     logger.info("AutoSEO API starting", environment=settings.ENVIRONMENT)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Phase 2 lightweight migrations — additive columns only
+        from sqlalchemy import text
+        for stmt in [
+            "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS inp_ms INTEGER",
+            "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS fcp_ms INTEGER",
+            "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS device_type TEXT",
+        ]:
+            try:
+                await conn.execute(text(stmt))
+            except Exception as e:
+                logger.warning("migration_skipped", stmt=stmt, error=str(e))
     yield
     logger.info("AutoSEO API shutting down")
     await engine.dispose()

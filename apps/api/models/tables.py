@@ -237,6 +237,9 @@ class SnippetEvent(Base):
     lcp_ms = Column(Integer)
     cls_score = Column(Numeric(4, 3))
     ttfb_ms = Column(Integer)
+    inp_ms = Column(Integer)  # Phase 2 Gap 16 — INP is a Core Web Vital since 2024
+    fcp_ms = Column(Integer)
+    device_type = Column(Text)  # mobile|tablet|desktop — Gap 19
     user_agent = Column(Text)
     viewport_width = Column(SmallInteger)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

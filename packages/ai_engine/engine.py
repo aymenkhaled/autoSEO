@@ -70,7 +70,11 @@ def _get_client():
 
 # ─── Fix Generation ───────────────────────────────────────────────────────────
 
-FIX_PROMPT = """You are an expert SEO specialist. Generate a precise fix for this SEO issue.
+# ─── Issue-specific prompt templates (Gap 21) ────────────────────────────────
+# Generic prompts produce generic fixes. Each issue type gets its own template
+# tuned to the constraints and writing style for that signal.
+
+_GENERIC_PROMPT = """You are an expert SEO specialist. Generate a precise fix for this SEO issue.
 
 ISSUE TYPE: {issue_type}
 CURRENT VALUE: {current_value}
@@ -82,10 +86,10 @@ TARGET KEYWORDS: {target_keywords}
 
 CONSTRAINTS:
 - Title tags: 30–60 characters, include primary keyword naturally
-- Meta descriptions: 120–160 characters, include a compelling call to action
-- Alt text: descriptive, keyword-relevant, under 125 characters
-- H1: unique, descriptive, includes primary keyword, under 70 characters
-- Output ONLY valid JSON — no markdown, no explanation
+- Meta descriptions: 120–160 characters, include a compelling CTA
+- Alt text: descriptive, under 125 characters
+- H1: unique, descriptive, under 70 characters
+- Output ONLY valid JSON — no markdown, no explanation.
 
 Output format:
 {{
@@ -93,6 +97,159 @@ Output format:
   "confidence": <0.0–1.0>,
   "reasoning": "<one sentence why this fix improves SEO>"
 }}"""
+
+ISSUE_PROMPTS: dict[str, str] = {
+    "missing_meta_description": """You are an SEO copywriter. Write a meta description for this page.
+
+URL: {page_url}
+Page title: {page_title}
+Main heading: {h1_text}
+Page content (first 800 chars): {content_excerpt}
+Target keywords: {target_keywords}
+
+Rules:
+- 130–155 characters EXACTLY
+- Include the primary keyword naturally (do not stuff)
+- Begin with a benefit-led hook
+- Include one action verb (Discover, Learn, Get, See, Find, Compare)
+- Do NOT use first person ("we", "our", "I")
+- Do NOT mention the brand name (it's already in the title tag)
+- Do NOT use superlatives ("best", "amazing", "ultimate")
+- Plain text only — no quotes, no emoji
+
+Output ONLY valid JSON:
+{{"fix": "<meta description>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "title_too_short": """You are an SEO title-tag expert. Rewrite this title tag so it sits between 50 and 60 characters.
+
+Current title: {current_value}
+URL: {page_url}
+H1: {h1_text}
+Page excerpt: {content_excerpt}
+Target keywords: {target_keywords}
+
+Rules:
+- 50–60 characters
+- Lead with the primary keyword
+- Add a specific qualifier (year, location, audience, format) when helpful
+- Use sentence case or title case — match the site convention if visible in the excerpt
+- No emoji, no ALL CAPS, no clickbait
+
+Output ONLY valid JSON:
+{{"fix": "<title>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "title_too_long": """You are an SEO title-tag expert. Shorten this title tag to fit within 60 characters without losing the primary keyword.
+
+Current title: {current_value}
+URL: {page_url}
+Target keywords: {target_keywords}
+
+Rules:
+- 45–60 characters
+- Keep the primary keyword
+- Drop redundant brand suffixes if present
+- No truncation with ellipses
+
+Output ONLY valid JSON:
+{{"fix": "<title>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "missing_title": """You are an SEO title-tag expert. Write a title tag for this page from scratch.
+
+URL: {page_url}
+Main heading: {h1_text}
+Page excerpt: {content_excerpt}
+Target keywords: {target_keywords}
+
+Rules:
+- 50–60 characters
+- Include the primary keyword early
+- Specific and unique to this page
+
+Output ONLY valid JSON:
+{{"fix": "<title>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "missing_h1": """You are an SEO content editor. Write the H1 for this page.
+
+URL: {page_url}
+Title: {page_title}
+Page excerpt: {content_excerpt}
+Target keywords: {target_keywords}
+
+Rules:
+- 30–70 characters
+- Should communicate the page's primary purpose
+- Include the primary keyword naturally
+- Do not duplicate the title tag verbatim
+
+Output ONLY valid JSON:
+{{"fix": "<h1>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "images_missing_alt_text": """You are an accessibility & SEO specialist. Generate alt text suggestions.
+
+Page title: {page_title}
+URL: {page_url}
+Context (first 500 chars): {content_excerpt}
+Number of images missing alt: {current_value}
+
+Rules:
+- Each suggested alt text: 5–15 words
+- Describe what would be visually in such an image given the page topic
+- Include relevant keywords only when they fit naturally
+- Do NOT begin with "Image of" or "Picture of"
+
+Output ONLY valid JSON:
+{{"fix": "<one example alt-text suggestion the user can adapt>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "missing_canonical": """You are a technical SEO. Suggest the canonical URL for this page.
+
+URL: {page_url}
+
+Rules:
+- Use the absolute, lowercased, no-fragment, no-tracking-param version
+- Use https when possible
+- Strip trailing slash unless this is the root
+
+Output ONLY valid JSON:
+{{"fix": "<absolute canonical URL>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "missing_schema": """You are a structured-data expert. Suggest the JSON-LD schema type and minimal valid markup for this page.
+
+URL: {page_url}
+Title: {page_title}
+H1: {h1_text}
+Excerpt: {content_excerpt}
+
+Rules:
+- Pick the single MOST appropriate @type (Article, Product, FAQPage, Organization, WebPage, BreadcrumbList).
+- Include @context, @type, and the truly required fields only.
+- Use real values from the inputs above. Do not fabricate.
+- Output the JSON-LD as a STRING inside the "fix" field.
+
+Output ONLY valid JSON:
+{{"fix": "<the full JSON-LD string>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+
+    "meta_description_too_long": """You are an SEO copywriter. Tighten this meta description to fit within 155 characters without losing meaning.
+
+Current: {current_value}
+URL: {page_url}
+Target keywords: {target_keywords}
+
+Rules:
+- 130–155 characters
+- Keep the primary keyword and CTA
+- No first person, no brand name, no superlatives
+
+Output ONLY valid JSON:
+{{"fix": "<meta description>", "confidence": <0.0-1.0>, "reasoning": "<one sentence>"}}""",
+}
+
+
+def _select_prompt(issue_type: str) -> str:
+    return ISSUE_PROMPTS.get(issue_type, _GENERIC_PROMPT)
+
+
+# Backwards-compat alias for any older callers
+FIX_PROMPT = _GENERIC_PROMPT
 
 
 def _determine_tier(issue_type: str, confidence: float) -> int:
@@ -135,7 +292,8 @@ async def generate_fix(
 
     model = "claude-haiku-3-5" if _use_haiku(issue_type) else "claude-sonnet-4-5"
 
-    prompt = FIX_PROMPT.format(
+    template = _select_prompt(issue_type)
+    prompt = template.format(
         issue_type=issue_type,
         current_value=current_value or "(empty)",
         page_url=page_url,

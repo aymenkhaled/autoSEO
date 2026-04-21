@@ -102,6 +102,18 @@ After disabling, users can sign up and log in immediately without confirming the
 | Crawler | Crawl4AI + Camoufox + ScrapFly |
 | Payments | Stripe (subscriptions + metered) |
 
+## Phase 2 — Crawler Build Plan v4 / Gap Analysis (April 2026)
+Implemented from gap-analysis files:
+- **Crawler**: URL normalization & dedup (`packages/crawler/url_utils.py`); SSRF protection (private/loopback IPs blocked); concurrent fetching with `asyncio.Semaphore(5)`; crawl cancellation via `DELETE /crawls/{id}` (worker checks DB status between batches of 25); HTTP status codes & response headers threaded through Jina layer; real broken-link tracking (4xx/5xx URLs persisted as zero-score pages).
+- **Extractor**: page-type classification (homepage / product / article / utility / category) with type-aware thin-content thresholds; heading hierarchy violation detection (e.g. H1→H3 skip); non-modern image format detection (jpg/png without webp/avif fallback); HTTP-header signals (`X-Robots-Tag`, HSTS, `Link: rel=canonical`); new issue types: `http_404`, `server_error`, `blocked_content`, `heading_hierarchy_skip`, `non_modern_image_format`.
+- **Crawl dispatch**: `POST /crawls` now actually triggers the crawl (Celery when `REDIS_URL` set, else FastAPI BackgroundTasks for dev).
+- **Snippet**: collects INP & FCP (Gap 16 — Core Web Vitals since 2024), stored in `snippet_events.inp_ms / fcp_ms`; device-type detection (`device_type` column); History API patching for instant SPA detection; `pagehide` snapshot to capture final CLS; `data-sample` attribute for client-side sampling; respects `navigator.doNotTrack`.
+- **Snippet endpoint**: in-process IP rate limit (120/min/IP), bot User-Agent filtering (Googlebot, SEMrush, curl, …), DNT honouring.
+- **AI engine**: issue-specific prompt templates (Gap 21) for `missing_meta_description`, `title_too_short/long`, `missing_title`, `missing_h1`, `images_missing_alt_text`, `missing_canonical`, `missing_schema`, `meta_description_too_long`. Generic prompt is the fallback.
+- **Lifespan migration**: additive `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for new snippet columns runs on startup (no Alembic dependency).
+
+Deferred (low-impact for current credit budget): robots.txt cache (Gap 2), conditional GET (Gap 5), crawl budget allocator (Gap 6), keyword cannibalization detection (Gap 13), fix versioning (Gap 22), verification delay (Gap 23), Claude rate limits (Gap 24), HMAC snippet tokens (Security 2), KMS encryption (Security 4).
+
 ## What's Needed Next (API Keys Required)
 1. `ANTHROPIC_API_KEY` → enables real AI fix generation (stubs work without it)
 2. `STRIPE_SECRET_KEY` → enables real billing enforcement

@@ -76,5 +76,7 @@ class SnippetEventCreate(BaseModel):
     lcp: Optional[int] = None
     cls: Optional[float] = None
     ttfb: Optional[int] = None
+    inp: Optional[int] = None  # Gap 16 — Interaction to Next Paint
+    fcp: Optional[int] = None
     user_agent: Optional[str] = None
     viewport_width: Optional[int] = None

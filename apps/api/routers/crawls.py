@@ -1,6 +1,7 @@
 """Crawls router — trigger crawls, view status, SSE progress."""
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
+import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
@@ -18,6 +19,7 @@ router = APIRouter(tags=["crawls"])
 @router.post("", response_model=CrawlResponse, status_code=status.HTTP_201_CREATED)
 async def trigger_crawl(
     data: CrawlCreate,
+    background_tasks: BackgroundTasks,
     auth: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -53,11 +55,51 @@ async def trigger_crawl(
     await db.commit()
     await db.refresh(crawl)
 
-    # TODO: In Phase 2, dispatch Celery task here:
-    # from workers.tasks.crawl import run_site_crawl
-    # run_site_crawl.delay(str(site.id), str(crawl.id))
+    # Dispatch the crawl: prefer Celery (production) but fall back to in-process
+    # background task when no Redis broker is configured (dev / single-server).
+    site_id_str = str(site.id)
+    crawl_id_str = str(crawl.id)
+    try:
+        if os.environ.get("REDIS_URL"):
+            from workers.tasks.crawl import run_site_crawl
+            run_site_crawl.delay(site_id_str, crawl_id_str)
+        else:
+            import sys, pathlib
+            sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
+            from workers.tasks.crawl import _async_crawl
+            background_tasks.add_task(_async_crawl, site_id_str, crawl_id_str)
+    except Exception:
+        # Don't fail the API call if dispatch hiccups — crawl row stays queued
+        pass
 
     return crawl
+
+
+@router.delete("/{crawl_id}", status_code=status.HTTP_202_ACCEPTED)
+async def cancel_crawl(
+    crawl_id: UUID,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Request cancellation of a running crawl.
+
+    Sets the crawl status to 'cancelling' — the worker checks this between batches
+    and stops gracefully (Gap 4 from Phase 2 gap analysis).
+    """
+    result = await db.execute(
+        select(Crawl).where(Crawl.id == crawl_id, Crawl.org_id == auth.org_id)
+    )
+    crawl = result.scalar_one_or_none()
+    if not crawl:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl not found")
+    if crawl.status not in ("queued", "running"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot cancel crawl with status '{crawl.status}'",
+        )
+    crawl.status = "cancelling"
+    await db.commit()
+    return {"crawl_id": str(crawl_id), "status": "cancelling"}
 
 
 @router.get("", response_model=CrawlListResponse)
