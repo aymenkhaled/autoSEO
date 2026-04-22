@@ -11,7 +11,7 @@ import json
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.crawl import CrawlCreate, CrawlResponse, CrawlListResponse
-from models.tables import Crawl, Site
+from models.tables import Crawl, Site, Page
 
 router = APIRouter(tags=["crawls"])
 
@@ -149,6 +149,105 @@ async def get_crawl(
     if not crawl:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl not found")
     return crawl
+
+
+@router.get("/{crawl_id}/diff")
+async def crawl_diff(
+    crawl_id: UUID,
+    compare_to: UUID | None = Query(None, description="Crawl ID to compare against; defaults to the previous crawl of the same site"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Compare two crawls of the same site and report what changed
+    (Missing Feature 3 — crawl-to-crawl diff).
+
+    Returns: new pages, removed pages, score-improved, score-declined,
+    and pages whose title changed since the previous crawl.
+    """
+    current = (await db.execute(
+        select(Crawl).where(Crawl.id == crawl_id, Crawl.org_id == auth.org_id)
+    )).scalar_one_or_none()
+    if not current:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Crawl not found")
+
+    if compare_to:
+        previous = (await db.execute(
+            select(Crawl).where(
+                Crawl.id == compare_to,
+                Crawl.org_id == auth.org_id,
+                Crawl.site_id == current.site_id,
+            )
+        )).scalar_one_or_none()
+    else:
+        previous = (await db.execute(
+            select(Crawl)
+            .where(
+                Crawl.site_id == current.site_id,
+                Crawl.org_id == auth.org_id,
+                Crawl.id != current.id,
+                Crawl.status == "completed",
+                Crawl.started_at < current.started_at,
+            )
+            .order_by(Crawl.started_at.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+
+    if not previous:
+        return {
+            "current_crawl_id": str(current.id),
+            "previous_crawl_id": None,
+            "message": "No previous crawl to compare against",
+            "new_pages": [], "removed_pages": [],
+            "score_improved": [], "score_declined": [],
+            "title_changed": [],
+        }
+
+    cur_pages = (await db.execute(
+        select(Page.url, Page.seo_score, Page.title).where(Page.crawl_id == current.id)
+    )).all()
+    prev_pages = (await db.execute(
+        select(Page.url, Page.seo_score, Page.title).where(Page.crawl_id == previous.id)
+    )).all()
+
+    cur_map = {p.url: p for p in cur_pages}
+    prev_map = {p.url: p for p in prev_pages}
+
+    new_pages = sorted(set(cur_map) - set(prev_map))
+    removed_pages = sorted(set(prev_map) - set(cur_map))
+
+    score_improved, score_declined, title_changed = [], [], []
+    for url in set(cur_map) & set(prev_map):
+        c, p = cur_map[url], prev_map[url]
+        cs, ps = c.seo_score or 0, p.seo_score or 0
+        if cs > ps:
+            score_improved.append({"url": url, "from": ps, "to": cs, "delta": cs - ps})
+        elif cs < ps:
+            score_declined.append({"url": url, "from": ps, "to": cs, "delta": cs - ps})
+        if (c.title or "") != (p.title or ""):
+            title_changed.append({"url": url, "from": p.title, "to": c.title})
+
+    score_improved.sort(key=lambda x: -x["delta"])
+    score_declined.sort(key=lambda x: x["delta"])
+
+    return {
+        "current_crawl_id": str(current.id),
+        "previous_crawl_id": str(previous.id),
+        "current_started_at": current.started_at.isoformat() if current.started_at else None,
+        "previous_started_at": previous.started_at.isoformat() if previous.started_at else None,
+        "summary": {
+            "new_pages_count": len(new_pages),
+            "removed_pages_count": len(removed_pages),
+            "score_improved_count": len(score_improved),
+            "score_declined_count": len(score_declined),
+            "title_changed_count": len(title_changed),
+            "site_score_delta": (current.seo_score or 0) - (previous.seo_score or 0),
+        },
+        "new_pages": new_pages[:100],
+        "removed_pages": removed_pages[:100],
+        "score_improved": score_improved[:50],
+        "score_declined": score_declined[:50],
+        "title_changed": title_changed[:50],
+    }
 
 
 @router.get("/{crawl_id}/progress")

@@ -1,4 +1,10 @@
-"""Issues router — list, filter, and view SEO issues."""
+"""Issues router — list, filter, and view SEO issues.
+
+Phase 2 additions:
+- Missing Feature 6: aggregated view groups identical issue types across pages
+  so the UI can show "300 pages missing meta description" as one row instead
+  of 300 separate rows.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -8,9 +14,14 @@ from typing import Optional
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import IssueResponse, IssueListResponse
-from models.tables import Issue
+from models.tables import Issue, Page
 
 router = APIRouter(tags=["issues"])
+
+
+# Auto-fixable issue types (kept in sync with the AI engine)
+_BULK_FIXABLE = {"missing_meta_description", "missing_alt_text", "broken_canonical",
+                 "title_too_short", "title_too_long", "meta_description_too_long"}
 
 
 @router.get("", response_model=IssueListResponse)
@@ -58,6 +69,70 @@ async def list_issues(
     issues = result.scalars().all()
 
     return IssueListResponse(issues=issues, total=total)
+
+
+@router.get("/aggregated")
+async def list_aggregated_issues(
+    site_id: UUID = Query(None),
+    crawl_id: UUID = Query(None),
+    severity: Optional[str] = Query(None),
+    fix_status: Optional[str] = Query("pending"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Group issues by type so the UI can present them as patterns instead of a flood
+    (Missing Feature 6 from the gap analysis).
+
+    Returns one row per issue type with: count, max severity, total impact,
+    sample affected URLs, and whether the group can be bulk-fixed.
+    """
+    conditions = [Issue.org_id == auth.org_id]
+    if site_id:
+        conditions.append(Issue.site_id == site_id)
+    if crawl_id:
+        conditions.append(Issue.crawl_id == crawl_id)
+    if severity:
+        conditions.append(Issue.severity == severity)
+    if fix_status:
+        conditions.append(Issue.fix_status == fix_status)
+
+    # Aggregate at the DB level to keep this cheap on large sites
+    agg = (await db.execute(
+        select(
+            Issue.type,
+            Issue.category,
+            func.max(Issue.severity).label("severity"),
+            func.count(Issue.id).label("count"),
+            func.sum(Issue.impact_score).label("total_impact"),
+            func.max(Issue.fix_type).label("fix_type"),
+        )
+        .where(*conditions)
+        .group_by(Issue.type, Issue.category)
+        .order_by(func.sum(Issue.impact_score).desc())
+    )).all()
+
+    # For each group, fetch up to 5 sample URLs (joined to pages)
+    out = []
+    for row in agg:
+        sample_urls = (await db.execute(
+            select(Page.url)
+            .join(Issue, Issue.page_id == Page.id)
+            .where(*conditions, Issue.type == row.type)
+            .limit(5)
+        )).scalars().all()
+
+        out.append({
+            "type": row.type,
+            "category": row.category,
+            "severity": row.severity,
+            "count": int(row.count or 0),
+            "total_impact": int(row.total_impact or 0),
+            "fix_type": row.fix_type,
+            "can_bulk_fix": row.type in _BULK_FIXABLE,
+            "sample_urls": list(sample_urls),
+        })
+
+    return {"groups": out, "total_groups": len(out)}
 
 
 @router.get("/{issue_id}", response_model=IssueResponse)
