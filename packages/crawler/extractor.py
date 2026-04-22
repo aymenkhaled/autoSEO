@@ -116,6 +116,11 @@ class SEOExtractor:
         canonical_tag = self.soup.find("link", attrs={"rel": "canonical"})
         robots_tag = self.soup.find("meta", attrs={"name": "robots"})
         viewport_tag = self.soup.find("meta", attrs={"name": "viewport"})
+        # Charset: <meta charset=…> OR <meta http-equiv="content-type">
+        charset_tag = self.soup.find("meta", attrs={"charset": True})
+        if not charset_tag:
+            ct_tag = self.soup.find("meta", attrs={"http-equiv": lambda v: v and v.lower() == "content-type"})
+            charset_tag = ct_tag if ct_tag and "charset" in (ct_tag.get("content") or "").lower() else None
         html_tag = self.soup.find("html")
 
         t = title_tag.get_text(strip=True) if title_tag else None
@@ -128,6 +133,7 @@ class SEOExtractor:
             "canonical_url": canonical_tag.get("href") if canonical_tag else None,
             "robots_directive": robots_tag.get("content") if robots_tag else "index, follow",
             "has_viewport": viewport_tag is not None,
+            "has_charset": charset_tag is not None,
             "html_lang": html_tag.get("lang") if html_tag else None,
         }
 
@@ -267,11 +273,22 @@ class SEOExtractor:
         normalized = " ".join(w.lower() for w in words)
         content_hash = hashlib.sha1(normalized.encode("utf-8")).hexdigest() if normalized else None
 
+        # Mixed content: count http:// references inside an https page
+        mixed_count = 0
+        if self.url.startswith("https://"):
+            for tag, attr in (("img", "src"), ("script", "src"), ("link", "href"),
+                              ("iframe", "src"), ("source", "src"), ("video", "src")):
+                for el in self.soup.find_all(tag):
+                    val = (el.get(attr) or "").strip()
+                    if val.startswith("http://"):
+                        mixed_count += 1
+
         return {
             "hreflang_tags": hreflang if hreflang else None,
             "hreflang_errors": [],
             "word_count": len(words),
             "content_hash": content_hash,
+            "mixed_content": mixed_count,
         }
 
     def _http_headers(self) -> dict:
@@ -330,58 +347,102 @@ def _parse_link_header_canonical(link_header: str | None) -> str | None:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def calculate_page_score(signals: dict) -> int:
-    """Weighted SEO score 0–100 based on extracted signals."""
+    """Additive SEO score 0–100.
+
+    Awards points for positive signals rather than starting at 100 and deducting.
+    This means an empty/skeleton page legitimately scores low (it has nothing
+    going for it) instead of artificially landing in the 60s after deductions.
+    """
     status = signals.get("status_code", 200) or 200
-    if status == 404 or status == 410:
+    if status in (404, 410):
         return 0
     if status >= 500:
-        return 10
+        return 5
 
-    score = 100
-    deductions = []
+    score = 0
+    page_type = signals.get("page_type") or "generic"
 
+    # Title (max 18 pts)
     title = signals.get("title")
     title_len = signals.get("title_length", 0)
-    if not title:
-        deductions.append(15)
-    elif title_len < 30 or title_len > 60:
-        deductions.append(8)
+    if title:
+        score += 8
+        if 30 <= title_len <= 60:
+            score += 10
+        elif 20 <= title_len <= 70:
+            score += 5
 
+    # Meta description (max 14 pts)
     desc = signals.get("meta_description")
     desc_len = signals.get("meta_description_length", 0)
-    if not desc:
-        deductions.append(10)
-    elif desc_len < 70 or desc_len > 160:
-        deductions.append(5)
+    if desc:
+        score += 6
+        if 120 <= desc_len <= 160:
+            score += 8
+        elif 70 <= desc_len <= 180:
+            score += 4
 
+    # H1 (max 10 pts)
     h1_count = signals.get("h1_count", 0)
-    if h1_count == 0:
-        deductions.append(10)
+    if h1_count == 1:
+        score += 10
     elif h1_count > 1:
-        deductions.append(5)
+        score += 4
 
-    if signals.get("heading_hierarchy_skips"):
-        deductions.append(3)
+    # Heading hierarchy intact (5 pts)
+    if h1_count >= 1 and not signals.get("heading_hierarchy_skips"):
+        score += 5
 
-    if signals.get("images_missing_alt", 0) > 0:
-        ratio = min(signals["images_missing_alt"] / max(signals.get("images_count", 1), 1), 1.0)
-        deductions.append(int(ratio * 10))
+    # Images (max 8 pts)
+    img_total = signals.get("images_count", 0) or 0
+    img_missing = signals.get("images_missing_alt", 0) or 0
+    if img_total == 0:
+        score += 4  # neutral — no images, no problem
+    else:
+        coverage = max(0.0, 1.0 - (img_missing / img_total))
+        score += int(8 * coverage)
 
-    if signals.get("images_non_modern_format", 0) > 5:
-        deductions.append(4)
+    # Modern formats (3 pts) — credit if there are images and most are modern
+    if img_total > 0 and signals.get("images_non_modern_format", 0) <= max(2, img_total // 5):
+        score += 3
 
-    if not signals.get("schema_types"):
-        deductions.append(5)
+    # Canonical (6 pts)
+    if signals.get("canonical_url") or signals.get("http_canonical"):
+        score += 6
 
-    if not (signals.get("canonical_url") or signals.get("http_canonical")):
-        deductions.append(5)
+    # Structured data (8 pts)
+    if signals.get("schema_types"):
+        score += 6
+        if signals.get("schema_valid", True):
+            score += 2
 
-    page_type = signals.get("page_type") or "generic"
+    # Open graph / social (5 pts)
+    if signals.get("og_title") and signals.get("og_description"):
+        score += 5
+
+    # Mobile viewport (4 pts)
+    if signals.get("has_viewport"):
+        score += 4
+
+    # Charset declared (2 pts)
+    if signals.get("has_charset"):
+        score += 2
+
+    # HTTPS / no mixed content (4 pts)
+    if signals.get("url", "").startswith("https://") and not signals.get("mixed_content"):
+        score += 4
+
+    # Content depth (max 13 pts) — page-type aware
+    word_count = signals.get("word_count", 0) or 0
     threshold = THIN_CONTENT_THRESHOLDS.get(page_type, 250)
-    if signals.get("word_count", 0) < threshold:
-        deductions.append(5)
+    if word_count >= threshold * 2:
+        score += 13
+    elif word_count >= threshold:
+        score += 9
+    elif word_count >= threshold // 2:
+        score += 4
 
-    return max(0, score - sum(deductions))
+    return max(0, min(100, score))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -583,6 +644,38 @@ def generate_issues(pages: list[dict]) -> list[dict]:
                 "severity": "high" if broken > 5 else "medium",
                 "impact_score": min(40 + broken * 3, 80),
                 "current_value": f"{broken} broken outbound links",
+                "fix_type": "manual",
+            })
+
+        # Mobile viewport
+        if not page.get("has_viewport"):
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "missing_viewport", "category": "mobile",
+                "severity": "high", "impact_score": 65,
+                "current_value": "No <meta name='viewport'> tag",
+                "fix_type": "manual",
+            })
+
+        # Charset declaration
+        if not page.get("has_charset"):
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "missing_charset", "category": "technical",
+                "severity": "low", "impact_score": 20,
+                "current_value": "No <meta charset> declared",
+                "fix_type": "manual",
+            })
+
+        # Mixed content (https page loading http:// resources)
+        mixed = page.get("mixed_content") or 0
+        if mixed > 0:
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "mixed_content", "category": "security",
+                "severity": "high" if mixed > 3 else "medium",
+                "impact_score": min(50 + mixed * 5, 85),
+                "current_value": f"{mixed} insecure http:// resources on https page",
                 "fix_type": "manual",
             })
 

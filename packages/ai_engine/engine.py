@@ -293,14 +293,30 @@ async def generate_fix(
     model = "claude-haiku-3-5" if _use_haiku(issue_type) else "claude-sonnet-4-5"
 
     template = _select_prompt(issue_type)
+    # Defensive: sanitize all caller-supplied free text to defeat prompt injection.
+    try:
+        from packages.shared.ai_safety import sanitize_field_value, sanitize_html_for_ai
+        safe_current = sanitize_field_value(current_value or "(empty)", 500)
+        safe_title = sanitize_field_value(page_title or "(unknown)", 200)
+        safe_h1 = sanitize_field_value(h1_text or "(none)", 200)
+        safe_excerpt = sanitize_html_for_ai(content_excerpt or "", 1000)
+        safe_keywords = sanitize_field_value(target_keywords or "(none)", 200)
+    except Exception:
+        # Sanitizer unavailable — fall back to raw (engine still functions in tests)
+        safe_current = current_value or "(empty)"
+        safe_title = page_title or "(unknown)"
+        safe_h1 = h1_text or "(none)"
+        safe_excerpt = (content_excerpt or "")[:1000]
+        safe_keywords = target_keywords or "(none)"
+
     prompt = template.format(
         issue_type=issue_type,
-        current_value=current_value or "(empty)",
+        current_value=safe_current,
         page_url=page_url,
-        page_title=page_title or "(unknown)",
-        h1_text=h1_text or "(none)",
-        content_excerpt=(content_excerpt or "")[:1000],
-        target_keywords=target_keywords or "(none)",
+        page_title=safe_title,
+        h1_text=safe_h1,
+        content_excerpt=safe_excerpt,
+        target_keywords=safe_keywords,
     )
 
     try:

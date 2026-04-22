@@ -4,15 +4,16 @@ Gap 22 (deferred → done): every apply/rollback writes a `FixVersion` row
 giving an authoritative, append-only history independent of the issue's
 mutable rollback_value field.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timezone
+import os
 
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import FixApplyRequest, FixRollbackRequest, FixResponse
-from models.tables import Issue, ChangeLog, FixVersion
+from models.tables import Issue, ChangeLog, FixVersion, Site
 
 router = APIRouter(tags=["fixes"])
 
@@ -28,6 +29,7 @@ async def _next_version_number(db: AsyncSession, issue_id) -> int:
 @router.post("/apply", response_model=FixResponse)
 async def apply_fix(
     data: FixApplyRequest,
+    background: BackgroundTasks,
     auth: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -85,6 +87,19 @@ async def apply_fix(
     db.add(log_entry)
     await db.commit()
 
+    # Push to the live CMS via the appropriate adapter (background, fire-and-forget).
+    # In dev (no Redis) we run inline; in prod the Celery worker picks it up.
+    site = (await db.execute(select(Site).where(Site.id == issue.site_id))).scalar_one_or_none()
+    if site and site.connection_type not in ("crawler",):
+        from workers.tasks.fix import apply_ai_fix
+        if os.environ.get("REDIS_URL"):
+            try:
+                apply_ai_fix.delay(str(issue.id), str(site.id))
+            except Exception:
+                background.add_task(_run_apply_inline, str(issue.id), str(site.id))
+        else:
+            background.add_task(_run_apply_inline, str(issue.id), str(site.id))
+
     return FixResponse(
         issue_id=issue.id,
         status="applied",
@@ -92,6 +107,16 @@ async def apply_fix(
         old_value=issue.current_value,
         new_value=issue.proposed_fix,
     )
+
+
+async def _run_apply_inline(issue_id: str, site_id: str):
+    """Run the apply pipeline inline for dev (no Celery worker)."""
+    from workers.tasks.fix import _apply_ai_fix_async
+    try:
+        await _apply_ai_fix_async(issue_id, site_id)
+    except Exception:
+        # Errors are logged inside the worker; we never crash the request.
+        pass
 
 
 @router.post("/rollback", response_model=FixResponse)

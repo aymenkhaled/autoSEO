@@ -1,4 +1,13 @@
 """AutoSEO API — FastAPI application entry point."""
+import os
+import sys
+
+# Make the workspace root importable so `from packages.cms_adapters import …`
+# resolves the same way it does inside the workers.
+_WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _WORKSPACE_ROOT not in sys.path:
+    sys.path.insert(0, _WORKSPACE_ROOT)
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,6 +97,7 @@ from routers.sites import router as sites_router
 from routers.crawls import router as crawls_router
 from routers.issues import router as issues_router
 from routers.fixes import router as fixes_router
+from routers.connections import router as connections_router
 from routers.snippet import router as snippet_router
 from routers.webhooks import router as webhooks_router
 from routers.analytics import router as analytics_router
@@ -101,6 +111,7 @@ from routers.change_log import router as change_log_router
 
 app.include_router(auth_router, prefix="/auth")
 app.include_router(sites_router, prefix="/sites")
+app.include_router(connections_router, prefix="/sites")
 app.include_router(crawls_router, prefix="/crawls")
 app.include_router(issues_router, prefix="/issues")
 app.include_router(fixes_router, prefix="/fixes")
@@ -117,6 +128,7 @@ app.include_router(change_log_router, prefix="/change-log")
 
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(sites_router, prefix="/api/sites")
+app.include_router(connections_router, prefix="/api/sites")
 app.include_router(crawls_router, prefix="/api/crawls")
 app.include_router(issues_router, prefix="/api/issues")
 app.include_router(fixes_router, prefix="/api/fixes")

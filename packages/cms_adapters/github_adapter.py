@@ -118,7 +118,46 @@ class GitHubAdapter(BaseCMSAdapter):
         return pages
 
     async def get_page(self, page_id: str) -> CMSPage:
-        raise NotImplementedError("Use list_pages() and the raw path to fetch content.")
+        """Fetch a single markdown/MDX file by path and parse its frontmatter.
+
+        page_id may be a file SHA OR the file path directly.
+        """
+        path = page_id if "/" in page_id or page_id.endswith((".md", ".mdx")) else None
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if path is None:
+                # Fall back to tree lookup by SHA
+                tree_resp = await client.get(
+                    f"{GH_API}/repos/{self.owner}/{self.repo}/git/trees/{self.branch}",
+                    params={"recursive": "1"},
+                    headers=self._headers(),
+                )
+                if tree_resp.status_code != 200:
+                    raise ValueError(f"Could not list tree for {self.owner}/{self.repo}")
+                for f in tree_resp.json().get("tree", []):
+                    if f.get("sha") == page_id:
+                        path = f.get("path")
+                        break
+                if path is None:
+                    raise ValueError(f"Could not resolve page_id {page_id} to a file path")
+
+            resp = await client.get(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{path}",
+                params={"ref": self.branch},
+                headers=self._headers(),
+            )
+            if resp.status_code != 200:
+                raise ValueError(f"File {path} not found in {self.owner}/{self.repo}")
+            data = resp.json()
+            content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+            fm = _read_frontmatter(content)
+            return CMSPage(
+                id=path,
+                url=f"/{path}",
+                title=fm.get("title", path.rsplit("/", 1)[-1]),
+                meta_description=fm.get("description") or fm.get("metaDescription") or "",
+                canonical_url=fm.get("canonical"),
+                raw={"path": path, "sha": data["sha"], "frontmatter": fm},
+            )
 
     async def apply_fix(self, page_id: str, field: str, new_value: str) -> ApplyResult:
         """Create a branch and PR with the SEO fix applied to the file.
@@ -198,6 +237,26 @@ class GitHubAdapter(BaseCMSAdapter):
                     rollback_value=old_value,
                 )
             return ApplyResult(success=False, message=f"PR creation failed: {pr_resp.text[:200]}")
+
+
+def _read_frontmatter(content: str) -> dict:
+    """Parse YAML frontmatter from a markdown/MDX file (lightweight, no PyYAML).
+
+    Only handles the simple key: value lines we generate. Falls back to {} on
+    any parse difficulty so we never raise from a benign file.
+    """
+    import re
+    m = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
+    if not m:
+        return {}
+    out: dict = {}
+    for line in m.group(1).splitlines():
+        line = line.rstrip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        k, _, v = line.partition(":")
+        out[k.strip()] = v.strip().strip('"').strip("'")
+    return out
 
 
 def _patch_frontmatter(content: str, field: str, new_value: str) -> tuple[str, str]:
