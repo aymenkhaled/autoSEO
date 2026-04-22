@@ -82,14 +82,41 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# --- CORS — allow all origins for Replit proxied dev environment ---
+# --- CORS ---
+# Bearer-token API → cookies are never sent, so wildcard is safe
+# (browsers refuse `*` + credentials anyway). Override via ALLOWED_ORIGINS
+# (comma-separated) to lock down in production.
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "*").strip()
+if _raw_origins == "*" or not _raw_origins:
+    _allow_origins = ["*"]
+    _allow_credentials = False
+else:
+    _allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+    _allow_credentials = True
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allow_origins,
+    allow_credentials=_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    expose_headers=["X-Request-Id"],
+    max_age=600,
 )
+
+
+# --- Security headers (defense in depth) ---
+@app.middleware("http")
+async def _security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    if request.url.scheme == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 # --- Import and register routers ---
 from routers.auth import router as auth_router

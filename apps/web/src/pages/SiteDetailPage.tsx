@@ -8,7 +8,7 @@ import {
   Clock, Shield, Zap, ChevronUp, ChevronDown, Minus,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api-client'
+import { api, connectionsApi, type ConnectionType, type ConnectionPayload } from '@/lib/api-client'
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -424,9 +424,179 @@ function BacklinksTab() {
 }
 
 // ─── Settings Tab ─────────────────────────────────────────────────────────────
+const CONNECTION_OPTIONS: { value: ConnectionType; label: string; desc: string }[] = [
+  { value: 'crawler', label: 'Crawler (read-only)', desc: 'No credentials. Detect issues only.' },
+  { value: 'snippet', label: 'JS Snippet', desc: 'Inject a small script into your site.' },
+  { value: 'wordpress', label: 'WordPress', desc: 'Apply fixes via REST API + Application Password.' },
+  { value: 'shopify', label: 'Shopify', desc: 'Admin API access token.' },
+  { value: 'webflow', label: 'Webflow', desc: 'Data API v2 token.' },
+  { value: 'github', label: 'GitHub (static sites)', desc: 'Commit fixes to a repo.' },
+]
+
+function ConnectionDialog({
+  siteId, current, onClose, onSaved,
+}: { siteId: string; current: ConnectionType; onClose: () => void; onSaved: () => void }) {
+  const [type, setType] = useState<ConnectionType>(current ?? 'crawler')
+  const [form, setForm] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }))
+
+  const buildPayload = (): ConnectionPayload => {
+    const p: ConnectionPayload = { connection_type: type }
+    if (type === 'wordpress') Object.assign(p, { site_url: form.site_url, username: form.username, app_password: form.app_password })
+    if (type === 'shopify') Object.assign(p, { shop_domain: form.shop_domain, access_token: form.access_token })
+    if (type === 'webflow') Object.assign(p, { site_id: form.site_id, token: form.token })
+    if (type === 'github') Object.assign(p, { owner: form.owner, repo: form.repo, github_token: form.github_token, branch: form.branch || 'main' })
+    return p
+  }
+
+  const handleTest = async () => {
+    setBusy(true); setResult(null)
+    try {
+      const r = await connectionsApi.test(siteId, buildPayload())
+      setResult({ ok: !!r.success, msg: r.message || (r.success ? 'OK' : 'Failed') })
+    } catch (e: any) {
+      setResult({ ok: false, msg: e?.message || 'Test failed' })
+    } finally { setBusy(false) }
+  }
+
+  const handleSave = async () => {
+    setBusy(true); setResult(null)
+    try {
+      await connectionsApi.save(siteId, buildPayload())
+      onSaved(); onClose()
+    } catch (e: any) {
+      setResult({ ok: false, msg: e?.message || 'Save failed' })
+    } finally { setBusy(false) }
+  }
+
+  const Field = (k: string, label: string, opts: { type?: string; placeholder?: string } = {}) => (
+    <div>
+      <label className="text-xs font-medium text-muted-foreground block mb-1.5">{label}</label>
+      <input
+        type={opts.type || 'text'}
+        value={form[k] || ''}
+        placeholder={opts.placeholder}
+        onChange={(e) => set(k, e.target.value)}
+        className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+      />
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold text-foreground">Configure Connection</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><XCircle className="h-5 w-5" /></button>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Connection Method</label>
+          <select value={type} onChange={(e) => { setType(e.target.value as ConnectionType); setResult(null) }}
+            className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
+            {CONNECTION_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <p className="text-xs text-muted-foreground mt-1">{CONNECTION_OPTIONS.find((o) => o.value === type)?.desc}</p>
+        </div>
+
+        <div className="space-y-3">
+          {type === 'wordpress' && (<>
+            {Field('site_url', 'Site URL', { placeholder: 'https://example.com' })}
+            {Field('username', 'WordPress Username')}
+            {Field('app_password', 'Application Password', { type: 'password' })}
+          </>)}
+          {type === 'shopify' && (<>
+            {Field('shop_domain', 'Shop Domain', { placeholder: 'mystore.myshopify.com' })}
+            {Field('access_token', 'Admin API Access Token', { type: 'password' })}
+          </>)}
+          {type === 'webflow' && (<>
+            {Field('site_id', 'Webflow Site ID')}
+            {Field('token', 'API Token', { type: 'password' })}
+          </>)}
+          {type === 'github' && (<>
+            <div className="grid grid-cols-2 gap-3">
+              {Field('owner', 'Owner')}
+              {Field('repo', 'Repository')}
+            </div>
+            {Field('github_token', 'Personal Access Token', { type: 'password' })}
+            {Field('branch', 'Branch', { placeholder: 'main' })}
+          </>)}
+          {(type === 'crawler' || type === 'snippet') && (
+            <p className="text-xs text-muted-foreground">No credentials required for this method.</p>
+          )}
+        </div>
+
+        {result && (
+          <div className={`text-xs px-3 py-2 rounded-lg border ${result.ok ? 'border-green-500/30 bg-green-500/10 text-green-500' : 'border-red-500/30 bg-red-500/10 text-red-500'}`}>
+            {result.msg}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+          {type !== 'crawler' && type !== 'snippet' && (
+            <button onClick={handleTest} disabled={busy}
+              className="px-4 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+              {busy ? 'Testing…' : 'Test'}
+            </button>
+          )}
+          <button onClick={handleSave} disabled={busy}
+            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SettingsTab({ site }: { site: any }) {
+  const siteId = site?.id as string | undefined
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const { data: conn, refetch } = useQuery({
+    queryKey: ['site-connection', siteId],
+    queryFn: () => connectionsApi.status(siteId!),
+    enabled: !!siteId,
+  })
+  const current = (conn?.connection_type || site?.connection_type || 'crawler') as ConnectionType
+  const configured = !!conn?.configured
   return (
     <div className="space-y-6 max-w-2xl">
+      <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Site Connection</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Method: <span className="text-foreground font-medium">{current}</span>
+              {configured ? <span className="ml-2 text-green-500">● configured</span> : <span className="ml-2 text-yellow-500">● not configured</span>}
+            </p>
+          </div>
+          <button onClick={() => setDialogOpen(true)} disabled={!siteId}
+            className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+            Configure
+          </button>
+        </div>
+        {current === 'snippet' && conn?.snippet_url && (
+          <div className="text-xs">
+            <p className="text-muted-foreground mb-1">Add this to your site &lt;head&gt;:</p>
+            <code className="block px-3 py-2 rounded-lg bg-muted text-foreground font-mono break-all">
+              {`<script src="${conn.snippet_url}" async></script>`}
+            </code>
+          </div>
+        )}
+      </div>
+
+      {dialogOpen && siteId && (
+        <ConnectionDialog
+          siteId={siteId}
+          current={current}
+          onClose={() => setDialogOpen(false)}
+          onSaved={() => refetch()}
+        />
+      )}
+
       <div className="rounded-xl border border-border bg-card p-6 space-y-4">
         <h3 className="text-sm font-semibold text-foreground">Crawl Settings</h3>
         <div className="grid grid-cols-2 gap-4">

@@ -71,5 +71,34 @@ export const fixesApi = {
     api.post('fixes/rollback', { json: { issue_id: issueId } }).json<any>(),
 }
 
+// Connections (per-site CMS credentials)
+export type ConnectionType = 'crawler' | 'snippet' | 'wordpress' | 'shopify' | 'webflow' | 'github'
+
+export interface ConnectionPayload {
+  connection_type: ConnectionType
+  site_url?: string
+  username?: string
+  app_password?: string
+  shop_domain?: string
+  access_token?: string
+  site_id?: string
+  token?: string
+  owner?: string
+  repo?: string
+  github_token?: string
+  branch?: string
+}
+
+export const connectionsApi = {
+  status: (siteId: string) =>
+    api.get(`sites/${siteId}/connection`).json<any>(),
+  test: (siteId: string, payload: ConnectionPayload) =>
+    api.post(`sites/${siteId}/connection/test`, { json: payload }).json<any>(),
+  save: (siteId: string, payload: ConnectionPayload) =>
+    api.put(`sites/${siteId}/connection`, { json: payload }).json<any>(),
+  remove: (siteId: string) =>
+    api.delete(`sites/${siteId}/connection`),
+}
+
 // Alias for pages that import apiClient directly
 export const apiClient = api
