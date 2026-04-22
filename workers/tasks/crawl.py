@@ -408,6 +408,7 @@ async def _async_crawl(site_id: str, crawl_id: str):
                         h3_count=signals.get("h3_count", 0),
                         heading_structure=signals.get("heading_structure"),
                         word_count=signals.get("word_count", 0),
+                        content_hash=signals.get("content_hash"),
                         images_count=signals.get("images_count", 0),
                         images_missing_alt=signals.get("images_missing_alt", 0),
                         broken_links_count=signals.get("broken_links_count", 0),
@@ -462,6 +463,32 @@ async def _async_crawl(site_id: str, crawl_id: str):
                 raw_issues.extend(detect_cannibalization(extracted))
             except Exception as e:
                 logger.debug("cannibalization_detect_failed", error=str(e))
+
+            # Bug 2 (deferred → done): duplicate-content detection via content_hash.
+            # Group pages within this crawl that share an identical normalized body.
+            try:
+                buckets: dict[str, list[dict]] = {}
+                for p in extracted:
+                    h = p.get("content_hash")
+                    if not h or p.get("word_count", 0) < 50:
+                        continue
+                    buckets.setdefault(h, []).append(p)
+                for h, group in buckets.items():
+                    if len(group) < 2:
+                        continue
+                    sample_urls = [g.get("url") for g in group[:5]]
+                    for p in group:
+                        raw_issues.append({
+                            "page_id": p.get("_page_id"),
+                            "type": "duplicate_content",
+                            "category": "content",
+                            "severity": "high",
+                            "impact_score": 70,
+                            "current_value": f"{len(group)} pages share identical content (e.g. {', '.join(u for u in sample_urls if u)})",
+                            "fix_type": "manual",
+                        })
+            except Exception as e:
+                logger.debug("duplicate_detect_failed", error=str(e))
             for issue_data in raw_issues:
                 issue = Issue(
                     crawl_id=crawl_id,

@@ -258,10 +258,20 @@ class SEOExtractor:
         text = self.soup.get_text(separator=" ")
         # Better word splitting — avoid counting punctuation
         words = re.findall(r"\b\w+\b", text)
+
+        # Bug 2: content fingerprint for near-duplicate detection.
+        # Lightweight SimHash-style normalization: lowercase + collapse whitespace,
+        # then SHA-1. Pages with identical normalized body text will collide,
+        # which catches the common WP/Shopify duplicate-content patterns.
+        import hashlib
+        normalized = " ".join(w.lower() for w in words)
+        content_hash = hashlib.sha1(normalized.encode("utf-8")).hexdigest() if normalized else None
+
         return {
             "hreflang_tags": hreflang if hreflang else None,
             "hreflang_errors": [],
             "word_count": len(words),
+            "content_hash": content_hash,
         }
 
     def _http_headers(self) -> dict:
