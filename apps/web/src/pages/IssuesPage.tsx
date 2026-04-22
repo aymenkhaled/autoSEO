@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Bug, Filter, ChevronDown, AlertTriangle,
+  Filter, ChevronDown, AlertTriangle, Globe,
   XCircle, Info, CheckCircle2, Search, X, Loader2,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
+import { useSites } from '@/hooks/use-data'
 
 const SEVERITY_CONFIG: Record<string, { icon: any; className: string; label: string }> = {
   critical: { icon: XCircle,       className: 'bg-red-500/10 text-red-500 border-red-500/20',    label: 'Critical' },
@@ -34,8 +35,9 @@ const ISSUE_TYPE_LABELS: Record<string, string> = {
   thin_content: 'Thin Content',
 }
 
-function useIssues(params: { severity?: string; category?: string; fix_status?: string; page: number }) {
+function useIssues(params: { site_id?: string; severity?: string; category?: string; fix_status?: string; page: number }) {
   const searchParams: Record<string, string> = { page: String(params.page), per_page: '50' }
+  if (params.site_id) searchParams.site_id = params.site_id
   if (params.severity) searchParams.severity = params.severity
   if (params.category) searchParams.category = params.category
   if (params.fix_status) searchParams.fix_status = params.fix_status
@@ -48,6 +50,9 @@ function useIssues(params: { severity?: string; category?: string; fix_status?: 
 }
 
 export default function IssuesPage() {
+  const { data: sitesData } = useSites()
+  const sites: any[] = sitesData?.sites ?? []
+  const [siteId, setSiteId] = useState<string | null>(null)
   const [severity, setSeverity] = useState<string | null>(null)
   const [category, setCategory] = useState<string | null>(null)
   const [fixStatus, setFixStatus] = useState<string | null>(null)
@@ -56,6 +61,7 @@ export default function IssuesPage() {
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useIssues({
+    site_id: siteId ?? undefined,
     severity: severity ?? undefined,
     category: category ?? undefined,
     fix_status: fixStatus ?? undefined,
@@ -64,6 +70,7 @@ export default function IssuesPage() {
 
   const issues: any[] = data?.issues ?? []
   const total: number = data?.total ?? 0
+  const sitesById: Record<string, any> = Object.fromEntries(sites.map(s => [s.id, s]))
 
   const filtered = search
     ? issues.filter(i =>
@@ -72,7 +79,7 @@ export default function IssuesPage() {
       )
     : issues
 
-  const activeFilters = [severity, category, fixStatus].filter(Boolean).length
+  const activeFilters = [siteId, severity, category, fixStatus].filter(Boolean).length
 
   return (
     <div className="space-y-6">
@@ -103,12 +110,21 @@ export default function IssuesPage() {
       {showFilters && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
           className="bg-card border border-border rounded-xl p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search issues…"
                 className="w-full h-9 bg-background border border-border rounded-lg pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            </div>
+            <div className="relative">
+              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <select value={siteId ?? ''} onChange={(e) => { setSiteId(e.target.value || null); setPage(1) }}
+                className="w-full h-9 bg-background border border-border rounded-lg pl-9 pr-8 text-sm text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30">
+                <option value="">All sites</option>
+                {sites.map(s => <option key={s.id} value={s.id}>{s.domain || s.name}</option>)}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>
             <div className="relative">
               <select value={severity ?? ''} onChange={(e) => { setSeverity(e.target.value || null); setPage(1) }}
@@ -138,7 +154,7 @@ export default function IssuesPage() {
             </div>
           </div>
           {(activeFilters > 0 || search) && (
-            <button onClick={() => { setSeverity(null); setCategory(null); setFixStatus(null); setSearch(''); setPage(1) }}
+            <button onClick={() => { setSiteId(null); setSeverity(null); setCategory(null); setFixStatus(null); setSearch(''); setPage(1) }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
               <X className="h-3 w-3" /> Clear all filters
             </button>

@@ -52,6 +52,9 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS inp_ms INTEGER",
             "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS fcp_ms INTEGER",
             "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS device_type TEXT",
+            # Gap 5: conditional GET cache headers for pages
+            "ALTER TABLE pages ADD COLUMN IF NOT EXISTS etag TEXT",
+            "ALTER TABLE pages ADD COLUMN IF NOT EXISTS last_modified TEXT",
         ]:
             try:
                 await conn.execute(text(stmt))

@@ -151,6 +151,9 @@ class Page(Base):
     hreflang_tags = Column(JSONB)
     hreflang_errors = Column(ARRAY(Text))
     seo_score = Column(SmallInteger)
+    # Gap 5: conditional GET cache headers (deferred → done)
+    etag = Column(Text)
+    last_modified = Column(Text)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
     # Relationships
@@ -471,3 +474,29 @@ class AiUsage(Base):
     crawl_id = Column(UUID(as_uuid=True), ForeignKey("crawls.id"))
     issue_id = Column(UUID(as_uuid=True), ForeignKey("issues.id"))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+
+
+class FixVersion(Base):
+    """Gap 22 (deferred → done): snapshot of an issue's value before each fix.
+
+    Every apply writes one row, giving us an authoritative version history
+    independent of the (mutable) `issues.rollback_value` field.
+    """
+    __tablename__ = "fix_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    issue_id = Column(UUID(as_uuid=True), ForeignKey("issues.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    version_number = Column(Integer, nullable=False, default=1)
+    captured_value = Column(Text)         # value before the fix was applied
+    applied_value = Column(Text)          # value written by the fix
+    applied_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    action = Column(Text, nullable=False, default="apply")  # apply | rollback
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fix_versions_issue_id", "issue_id"),
+        Index("idx_fix_versions_site_id", "site_id"),
+    )

@@ -1,15 +1,22 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Wrench, Clock, CheckCircle2, RotateCcw, ArrowRight, Sparkles, Zap, Loader2, AlertTriangle } from 'lucide-react'
+import { Wrench, Clock, CheckCircle2, RotateCcw, ArrowRight, Sparkles, Zap, Loader2, AlertTriangle, Globe, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import { toast } from 'sonner'
+import { useSites } from '@/hooks/use-data'
 
-function useFixableIssues(fixStatus: string) {
+function useFixableIssues(fixStatus: string, siteId?: string | null) {
+  const searchParams: Record<string, string> = {
+    fix_type: 'auto',
+    fix_status: fixStatus,
+    per_page: '50',
+  }
+  if (siteId) searchParams.site_id = siteId
   return useQuery({
-    queryKey: ['fixes', fixStatus],
-    queryFn: () =>
-      apiClient.get('/issues', { searchParams: { fix_type: 'auto', fix_status: fixStatus, per_page: '50' } }).json<any>(),
+    queryKey: ['fixes', fixStatus, siteId ?? 'all'],
+    queryFn: () => apiClient.get('/issues', { searchParams }).json<any>(),
   })
 }
 
@@ -59,9 +66,13 @@ const SEVERITY_COLORS: Record<string, string> = {
 }
 
 export default function FixesPage() {
-  const { data: pendingData, isLoading: pendingLoading } = useFixableIssues('pending')
-  const { data: appliedData } = useFixableIssues('applied')
-  const { data: rolledBackData } = useFixableIssues('rolled_back')
+  const { data: sitesData } = useSites()
+  const sites: any[] = sitesData?.sites ?? []
+  const [siteId, setSiteId] = useState<string | null>(null)
+
+  const { data: pendingData, isLoading: pendingLoading } = useFixableIssues('pending', siteId)
+  const { data: appliedData } = useFixableIssues('applied', siteId)
+  const { data: rolledBackData } = useFixableIssues('rolled_back', siteId)
   const applyFix = useApplyFix()
   const rollback = useRollbackFix()
 
@@ -76,10 +87,19 @@ export default function FixesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Fixes</h1>
           <p className="text-sm text-muted-foreground mt-0.5">AI-generated fixes ready for your review and deployment</p>
+        </div>
+        <div className="relative min-w-[220px]">
+          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <select value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value || null)}
+            className="w-full h-9 bg-card border border-border rounded-lg pl-9 pr-8 text-sm text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30">
+            <option value="">All sites</option>
+            {sites.map((s: any) => <option key={s.id} value={s.id}>{s.domain || s.name}</option>)}
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
       </div>
 

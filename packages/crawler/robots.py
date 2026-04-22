@@ -1,19 +1,51 @@
-"""robots.txt parser and compliance checker."""
+"""robots.txt parser and compliance checker.
+
+Gap 2 (deferred → done): in-process cache so a single domain's robots.txt
+is fetched once and reused across every page in the same crawl process.
+"""
+import time
 import httpx
 from urllib.robotparser import RobotFileParser
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
+
+
+# Module-level cache: { (host, user_agent): (parser, fetched_at_unix) }
+_CACHE: dict[tuple[str, str], tuple[RobotFileParser, float]] = {}
+_CACHE_TTL_SECONDS = 3600  # 1 hour
+
+
+def _host_key(domain: str) -> str:
+    parsed = urlparse(domain if domain.startswith("http") else f"https://{domain}")
+    return f"{parsed.scheme}://{parsed.netloc}".lower()
 
 
 async def get_robots_rules(domain: str, user_agent: str = "AutoSEO") -> RobotFileParser:
-    robots_url = urljoin(domain, "/robots.txt")
-    async with httpx.AsyncClient(timeout=10) as client:
-        try:
+    """Fetch & parse robots.txt for a domain. Cached per (host, user_agent)."""
+    key = (_host_key(domain), user_agent)
+    now = time.time()
+
+    cached = _CACHE.get(key)
+    if cached and (now - cached[1]) < _CACHE_TTL_SECONDS:
+        return cached[0]
+
+    robots_url = urljoin(_host_key(domain) + "/", "robots.txt")
+    parser = RobotFileParser()
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(robots_url, timeout=10)
-            parser = RobotFileParser()
-            parser.parse(resp.text.splitlines())
-            return parser
-        except Exception:
-            return RobotFileParser()
+            if resp.status_code == 200:
+                parser.parse(resp.text.splitlines())
+    except Exception:
+        # Empty parser → allows everything by default
+        pass
+
+    _CACHE[key] = (parser, now)
+    return parser
+
+
+def clear_robots_cache() -> None:
+    """Test/debug helper."""
+    _CACHE.clear()
 
 
 def is_allowed(parser: RobotFileParser, url: str, user_agent: str = "AutoSEO") -> bool:

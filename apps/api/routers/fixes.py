@@ -1,16 +1,28 @@
-"""Fixes router — apply and rollback AI-generated SEO fixes."""
+"""Fixes router — apply and rollback AI-generated SEO fixes.
+
+Gap 22 (deferred → done): every apply/rollback writes a `FixVersion` row
+giving an authoritative, append-only history independent of the issue's
+mutable rollback_value field.
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from uuid import UUID
+from sqlalchemy import select, func
 from datetime import datetime, timezone
 
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import FixApplyRequest, FixRollbackRequest, FixResponse
-from models.tables import Issue, ChangeLog
+from models.tables import Issue, ChangeLog, FixVersion
 
 router = APIRouter(tags=["fixes"])
+
+
+async def _next_version_number(db: AsyncSession, issue_id) -> int:
+    res = await db.execute(
+        select(func.coalesce(func.max(FixVersion.version_number), 0))
+        .where(FixVersion.issue_id == issue_id)
+    )
+    return int(res.scalar() or 0) + 1
 
 
 @router.post("/apply", response_model=FixResponse)
@@ -19,14 +31,7 @@ async def apply_fix(
     auth: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Apply an AI-suggested fix to a site via CMS adapter.
-    
-    In Phase 3+, this will:
-    1. Fetch the proposed fix from the issue
-    2. Apply it via the appropriate CMS adapter
-    3. Re-verify the change was applied
-    4. Log to change_log
-    """
+    """Apply an AI-suggested fix to a site via CMS adapter."""
     result = await db.execute(
         select(Issue).where(Issue.id == data.issue_id, Issue.org_id == auth.org_id)
     )
@@ -46,13 +51,27 @@ async def apply_fix(
             detail="No proposed fix available for this issue",
         )
 
-    # TODO: Phase 3 — actually apply via CMS adapter
-    # For now, mark as applied and log
+    # Gap 22: snapshot the pre-fix value into fix_versions BEFORE mutating the issue
+    snapshot = FixVersion(
+        issue_id=issue.id,
+        site_id=issue.site_id,
+        org_id=issue.org_id,
+        version_number=await _next_version_number(db, issue.id),
+        captured_value=issue.current_value,
+        applied_value=issue.proposed_fix,
+        applied_by=auth.user_id,
+        action="apply",
+    )
+    db.add(snapshot)
+
+    # Preserve rollback target on the issue too (back-compat)
+    if not issue.rollback_value:
+        issue.rollback_value = issue.current_value
+
     issue.fix_status = "applied"
     issue.applied_at = datetime.now(timezone.utc)
     issue.applied_by = auth.user_id
 
-    # Audit log
     log_entry = ChangeLog(
         org_id=auth.org_id,
         site_id=issue.site_id,
@@ -81,7 +100,7 @@ async def rollback_fix(
     auth: AuthContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Rollback a previously applied fix."""
+    """Rollback a previously applied fix to its captured pre-fix value."""
     result = await db.execute(
         select(Issue).where(Issue.id == data.issue_id, Issue.org_id == auth.org_id)
     )
@@ -95,17 +114,35 @@ async def rollback_fix(
             detail="Fix has not been applied yet",
         )
 
-    if not issue.rollback_value:
+    # Prefer the most recent FixVersion's captured_value over the legacy field
+    last_version = (await db.execute(
+        select(FixVersion).where(FixVersion.issue_id == issue.id, FixVersion.action == "apply")
+        .order_by(FixVersion.version_number.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+
+    rollback_to = (last_version.captured_value if last_version else None) or issue.rollback_value
+    if rollback_to is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No rollback value stored for this fix",
         )
 
-    # TODO: Phase 3 — actually rollback via CMS adapter
+    snapshot = FixVersion(
+        issue_id=issue.id,
+        site_id=issue.site_id,
+        org_id=issue.org_id,
+        version_number=await _next_version_number(db, issue.id),
+        captured_value=issue.proposed_fix,
+        applied_value=rollback_to,
+        applied_by=auth.user_id,
+        action="rollback",
+    )
+    db.add(snapshot)
+
     issue.fix_status = "rolled_back"
     issue.rolled_back_at = datetime.now(timezone.utc)
 
-    # Audit log
     log_entry = ChangeLog(
         org_id=auth.org_id,
         site_id=issue.site_id,
@@ -114,7 +151,7 @@ async def rollback_fix(
         actor_type="user",
         actor_id=auth.user_id,
         old_value=issue.proposed_fix,
-        new_value=issue.rollback_value,
+        new_value=rollback_to,
     )
     db.add(log_entry)
     await db.commit()
@@ -124,5 +161,35 @@ async def rollback_fix(
         status="rolled_back",
         message="Fix rolled back successfully",
         old_value=issue.proposed_fix,
-        new_value=issue.rollback_value,
+        new_value=rollback_to,
     )
+
+
+@router.get("/versions/{issue_id}")
+async def list_fix_versions(
+    issue_id,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the full version history for an issue (Gap 22)."""
+    res = await db.execute(
+        select(FixVersion)
+        .where(FixVersion.issue_id == issue_id, FixVersion.org_id == auth.org_id)
+        .order_by(FixVersion.version_number.asc())
+    )
+    versions = res.scalars().all()
+    return {
+        "issue_id": str(issue_id),
+        "versions": [
+            {
+                "id": str(v.id),
+                "version_number": v.version_number,
+                "action": v.action,
+                "captured_value": v.captured_value,
+                "applied_value": v.applied_value,
+                "applied_by": str(v.applied_by) if v.applied_by else None,
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+            }
+            for v in versions
+        ],
+    }

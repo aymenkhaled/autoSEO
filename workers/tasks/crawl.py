@@ -100,14 +100,51 @@ def _looks_like_spa_shell(html: str) -> bool:
     return len(words) < 50
 
 
-async def _fetch_one(url: str, semaphore: asyncio.Semaphore, delay: float) -> dict | None:
-    """Try Layer 1 (Jina) → Layer 3 (ScrapFly with JS rendering) if blocked OR SPA shell."""
+async def _conditional_get_unchanged(url: str, etag: str | None, last_modified: str | None) -> bool:
+    """Gap 5 (deferred → done): cheap HEAD request with conditional headers.
+
+    Returns True if the origin says the page hasn't changed (HTTP 304), so the
+    crawler can reuse the prior page row and skip the full fetch.
+    """
+    if not etag and not last_modified:
+        return False
+    headers: dict[str, str] = {"User-Agent": "AutoSEO/1.0 (+https://autoseo.app)"}
+    if etag:
+        headers["If-None-Match"] = etag
+    if last_modified:
+        headers["If-Modified-Since"] = last_modified
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.head(url, headers=headers)
+            return resp.status_code == 304
+    except Exception:
+        return False
+
+
+async def _fetch_one(
+    url: str,
+    semaphore: asyncio.Semaphore,
+    delay: float,
+    cached_headers: dict[str, tuple[str | None, str | None]] | None = None,
+) -> dict | None:
+    """Try Layer 1 (Jina) → Layer 3 (ScrapFly with JS rendering) if blocked OR SPA shell.
+
+    cached_headers: { url: (etag, last_modified) } from prior crawl, used for
+    conditional GET (Gap 5).
+    """
     from packages.crawler.layers.jina_layer import fetch_with_jina
     from packages.crawler.layers.scrapfly_layer import fetch_with_scrapfly, is_blocked
 
     async with semaphore:
         if delay:
             await asyncio.sleep(delay)
+
+        # Gap 5: skip the full fetch if the origin returns 304 to a HEAD probe
+        if cached_headers and url in cached_headers:
+            etag, last_modified = cached_headers[url]
+            if await _conditional_get_unchanged(url, etag, last_modified):
+                return {"url": url, "status_code": 304, "headers": {}, "html": "", "_unchanged": True}
 
         page_data = None
         try:
@@ -212,6 +249,37 @@ async def _async_crawl(site_id: str, crawl_id: str):
             semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
             broken_url_codes: dict[str, int] = {}  # url -> status (Bug 7)
 
+            # Gap 5: load cached etag/last_modified from the most recent crawl per URL
+            cached_headers: dict[str, tuple[str | None, str | None]] = {}
+            try:
+                from sqlalchemy import select as _sel
+                rows = (await db.execute(
+                    _sel(Page.url, Page.etag, Page.last_modified)
+                    .where(Page.site_id == site_id, Page.url.in_(urls))
+                    .order_by(Page.created_at.desc())
+                )).all()
+                for r in rows:
+                    if r.url not in cached_headers:
+                        cached_headers[r.url] = (r.etag, r.last_modified)
+            except Exception as e:
+                logger.debug("cached_headers_load_failed", error=str(e))
+
+            # Map of prior page rows we can reuse when a 304 comes back
+            prior_pages_by_url: dict[str, Page] = {}
+            if cached_headers:
+                try:
+                    from sqlalchemy import select as _sel
+                    pri = (await db.execute(
+                        _sel(Page).where(
+                            Page.site_id == site_id,
+                            Page.url.in_(list(cached_headers.keys())),
+                        ).order_by(Page.created_at.desc())
+                    )).scalars().all()
+                    for p in pri:
+                        prior_pages_by_url.setdefault(p.url, p)
+                except Exception:
+                    pass
+
             crawled_pages: list[dict] = []
 
             # Process in batches so we can check cancellation often
@@ -227,7 +295,7 @@ async def _async_crawl(site_id: str, crawl_id: str):
 
                 batch = urls[batch_start: batch_start + BATCH]
                 results = await asyncio.gather(
-                    *(_fetch_one(u, semaphore, delay) for u in batch),
+                    *(_fetch_one(u, semaphore, delay, cached_headers) for u in batch),
                     return_exceptions=True,
                 )
                 for url, res in zip(batch, results):
@@ -254,6 +322,58 @@ async def _async_crawl(site_id: str, crawl_id: str):
                 rt = page_data.get("response_time_ms")
 
                 try:
+                    # Gap 5: 304 Not Modified — clone the prior page row into this crawl
+                    if page_data.get("_unchanged") and url in prior_pages_by_url:
+                        prior = prior_pages_by_url[url]
+                        cloned = Page(
+                            crawl_id=crawl_id,
+                            site_id=site_id,
+                            org_id=str(site.org_id),
+                            url=url,
+                            status_code=prior.status_code,
+                            response_time_ms=prior.response_time_ms,
+                            title=prior.title,
+                            title_length=prior.title_length,
+                            meta_description=prior.meta_description,
+                            meta_description_length=prior.meta_description_length,
+                            canonical_url=prior.canonical_url,
+                            robots_directive=prior.robots_directive,
+                            h1_count=prior.h1_count,
+                            h1_text=prior.h1_text,
+                            h2_count=prior.h2_count,
+                            h3_count=prior.h3_count,
+                            heading_structure=prior.heading_structure,
+                            word_count=prior.word_count,
+                            images_count=prior.images_count,
+                            images_missing_alt=prior.images_missing_alt,
+                            broken_links_count=prior.broken_links_count,
+                            og_title=prior.og_title,
+                            og_description=prior.og_description,
+                            og_image=prior.og_image,
+                            twitter_card=prior.twitter_card,
+                            schema_types=prior.schema_types,
+                            schema_valid=prior.schema_valid,
+                            schema_errors=prior.schema_errors,
+                            hreflang_tags=prior.hreflang_tags,
+                            hreflang_errors=prior.hreflang_errors,
+                            seo_score=prior.seo_score,
+                            internal_links_count=prior.internal_links_count,
+                            external_links_count=prior.external_links_count,
+                            etag=prior.etag,
+                            last_modified=prior.last_modified,
+                        )
+                        db.add(cloned)
+                        await db.flush()
+                        extracted.append({
+                            "_page_id": str(cloned.id),
+                            "url": url,
+                            "title": prior.title,
+                            "h1_text": prior.h1_text,
+                            "seo_score": prior.seo_score or 50,
+                            "page_type": classify_page_type(url, prior.schema_types),
+                        })
+                        continue
+
                     if html:
                         signals = SEOExtractor(html, url, headers=headers).extract_all()
                     else:
@@ -274,6 +394,8 @@ async def _async_crawl(site_id: str, crawl_id: str):
                         url=url,
                         status_code=status,
                         response_time_ms=rt,
+                        etag=(headers.get("etag") if isinstance(headers, dict) else None),
+                        last_modified=(headers.get("last-modified") if isinstance(headers, dict) else None),
                         title=signals.get("title"),
                         title_length=signals.get("title_length"),
                         meta_description=signals.get("meta_description"),
@@ -334,6 +456,12 @@ async def _async_crawl(site_id: str, crawl_id: str):
 
             # Generate issues
             raw_issues = generate_issues(extracted)
+            # Gap 13 (deferred → done): keyword cannibalization across the site
+            try:
+                from packages.crawler.cannibalization import detect_cannibalization
+                raw_issues.extend(detect_cannibalization(extracted))
+            except Exception as e:
+                logger.debug("cannibalization_detect_failed", error=str(e))
             for issue_data in raw_issues:
                 issue = Issue(
                     crawl_id=crawl_id,
