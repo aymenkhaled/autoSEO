@@ -21,6 +21,7 @@ from config import get_settings
 from dependencies import get_current_user, get_db
 from models.tables import Organization, Webhook, WebhookDelivery
 from packages.crawler.url_utils import is_safe_url, redirect_target_is_safe
+from packages.shared.notifications import notify_org_users
 from schemas.auth import AuthContext
 
 settings = get_settings()
@@ -104,6 +105,28 @@ async def _deliver_webhook(db: AsyncSession, webhook: Webhook, event: str, paylo
         attempted_at=datetime.now(timezone.utc),
     )
     db.add(delivery)
+    await db.flush()
+    if event == "webhook.test" or not success:
+        title = "Outbound webhook test delivered" if success and event == "webhook.test" else "Outbound webhook delivery failed"
+        body = (
+            f"{webhook.name} responded with {status_code or 'no status'}."
+            if success
+            else f"{webhook.name} failed with {status_code or 'no status'}."
+        )
+        await notify_org_users(
+            db,
+            webhook.org_id,
+            notification_type="webhook.delivery",
+            title=title,
+            body=body,
+            data={
+                "webhook_id": str(webhook.id),
+                "delivery_id": str(delivery.id),
+                "event": event,
+                "success": success,
+                "status_code": status_code,
+            },
+        )
     await db.commit()
     await db.refresh(delivery)
     return delivery
@@ -262,7 +285,7 @@ async def handle_stripe_webhook(
     elif event_type == "customer.subscription.updated":
         subscription_id = data.get("id")
         status_value = data.get("status")
-        new_plan = {"active": "pro", "past_due": "pro", "canceled": "starter"}.get(status_value, "starter")
+        new_plan = {"active": "pro", "past_due": "pro", "canceled": "free"}.get(status_value, "free")
         if subscription_id:
             await db.execute(
                 update(Organization)
@@ -276,7 +299,7 @@ async def handle_stripe_webhook(
             await db.execute(
                 update(Organization)
                 .where(Organization.stripe_subscription_id == subscription_id)
-                .values(plan="starter", stripe_subscription_id=None)
+                .values(plan="free", stripe_subscription_id=None)
             )
             await db.commit()
 

@@ -54,12 +54,13 @@ async def register(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
-    slug = slugify(data.org_name)
+    org_name = (data.org_name or f"{data.full_name}'s Organization").strip()
+    slug = slugify(org_name)
     slug_check = await db.execute(select(Organization).where(Organization.slug == slug))
     if slug_check.scalar_one_or_none():
         slug = f"{slug}-{str(uuid.uuid4())[:8]}"
 
-    org = Organization(name=data.org_name, slug=slug, plan="starter")
+    org = Organization(name=org_name, slug=slug, plan="free")
     db.add(org)
     await db.flush()
 

@@ -7,14 +7,24 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_current_user, get_db
-from models.tables import Crawl, ScheduledReport, Site
+from models.tables import Crawl, Issue, Page, ScheduledReport, Site
+from packages.shared.readiness import READINESS_SAVED_ONLY, readiness_payload
+from routers.issues import _guidance
 from schemas.auth import AuthContext
 
 router = APIRouter(tags=["reports"])
+
+
+def _report_delivery_state(report: ScheduledReport) -> dict[str, str]:
+    return readiness_payload(
+        READINESS_SAVED_ONLY,
+        label="Saved only",
+        description="This schedule is stored, but recurring delivery and PDF/email workers are not wired yet.",
+    )
 
 
 class ReportCreate(BaseModel):
@@ -55,6 +65,9 @@ async def list_reports(
                 "format": report.format,
                 "recipients": report.recipients,
                 "schedule_cron": report.schedule_cron,
+                "delivery_state": _report_delivery_state(report)["state"],
+                "delivery_state_label": _report_delivery_state(report)["label"],
+                "delivery_state_description": _report_delivery_state(report)["description"],
                 "last_sent_at": report.last_sent_at.isoformat() if report.last_sent_at else None,
                 "created_at": report.created_at.isoformat() if report.created_at else None,
             }
@@ -90,7 +103,14 @@ async def create_report(
     db.add(report)
     await db.commit()
     await db.refresh(report)
-    return {"id": str(report.id), "message": "Report schedule created"}
+    delivery_state = _report_delivery_state(report)
+    return {
+        "id": str(report.id),
+        "message": "Report schedule saved",
+        "delivery_state": delivery_state["state"],
+        "delivery_state_label": delivery_state["label"],
+        "delivery_state_description": delivery_state["description"],
+    }
 
 
 @router.post("/generate")
@@ -125,6 +145,85 @@ async def generate_report(
     if not target_crawl:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No crawl available for this report")
 
+    previous_crawl = (
+        await db.execute(
+            select(Crawl)
+            .where(
+                Crawl.site_id == data.site_id,
+                Crawl.org_id == auth.org_id,
+                Crawl.status == "completed",
+                Crawl.id != target_crawl.id,
+                Crawl.created_at < target_crawl.created_at,
+            )
+            .order_by(Crawl.completed_at.desc().nullslast(), Crawl.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    severity_rows = (
+        await db.execute(
+            select(Issue.severity, func.count(Issue.id))
+            .where(Issue.crawl_id == target_crawl.id, Issue.org_id == auth.org_id)
+            .group_by(Issue.severity)
+        )
+    ).all()
+    groups = (
+        await db.execute(
+            select(
+                Issue.type,
+                Issue.category,
+                func.max(Issue.severity).label("severity"),
+                func.count(Issue.id).label("count"),
+                func.sum(Issue.impact_score).label("impact"),
+            )
+            .where(Issue.crawl_id == target_crawl.id, Issue.org_id == auth.org_id)
+            .group_by(Issue.type, Issue.category)
+            .order_by(func.sum(Issue.impact_score).desc())
+        )
+    ).all()
+
+    root_causes = []
+    for row in groups:
+        examples = (
+            await db.execute(
+                select(Page.url, Issue.current_value)
+                .join(Page, Issue.page_id == Page.id, isouter=True)
+                .where(
+                    Issue.crawl_id == target_crawl.id,
+                    Issue.org_id == auth.org_id,
+                    Issue.type == row.type,
+                    Issue.category == row.category,
+                )
+                .order_by(Issue.impact_score.desc(), Issue.created_at.desc())
+                .limit(6)
+            )
+        ).all()
+        guidance = _guidance(row.type)
+        root_causes.append({
+            "type": row.type,
+            "title": guidance["title"],
+            "summary": guidance["summary"],
+            "why_it_matters": guidance["why_it_matters"],
+            "recommended_fix": guidance["recommended_fix"],
+            "category": row.category,
+            "severity": row.severity,
+            "affected_count": int(row.count or 0),
+            "impact": int(row.impact or 0),
+            "examples": [
+                {"url": url, "current_value": current_value}
+                for url, current_value in examples
+            ],
+        })
+
+    changed_since_last = None
+    if previous_crawl:
+        changed_since_last = {
+            "previous_crawl_id": str(previous_crawl.id),
+            "score_delta": (target_crawl.seo_score or 0) - (previous_crawl.seo_score or 0),
+            "issues_delta": (target_crawl.issues_found or 0) - (previous_crawl.issues_found or 0),
+            "pages_delta": (target_crawl.pages_crawled or 0) - (previous_crawl.pages_crawled or 0),
+        }
+
     return {
         "site_id": str(site.id),
         "crawl_id": str(target_crawl.id),
@@ -134,6 +233,19 @@ async def generate_report(
             "seo_score": target_crawl.seo_score,
             "pages_crawled": target_crawl.pages_crawled,
             "issues_found": target_crawl.issues_found,
+            "severity_counts": {severity: int(count) for severity, count in severity_rows},
         },
-        "message": "On-demand report data generated. PDF export can be layered on top of this payload.",
+        "root_causes": root_causes,
+        "changed_since_last_crawl": changed_since_last,
+        "next_actions": [
+            {
+                "title": item["title"],
+                "action": item["recommended_fix"],
+                "affected_count": item["affected_count"],
+            }
+            for item in root_causes[:5]
+        ],
+        "export_ready": True,
+        "note": "Raw issue totals can change when crawl limits or sampling change; use root-cause groups to judge whether the SEO problems changed.",
+        "message": "Report data generated with root causes, affected pages, recommendations, and export-ready sections.",
     }

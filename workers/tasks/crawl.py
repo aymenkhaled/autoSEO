@@ -6,6 +6,7 @@ import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urljoin
 
 import structlog
 
@@ -123,6 +124,31 @@ async def _conditional_get_unchanged(url: str, etag: str | None, last_modified: 
         return False
 
 
+async def _check_public_endpoint(url: str) -> tuple[bool, int | None]:
+    from packages.crawler.url_utils import is_safe_url
+
+    if not is_safe_url(url):
+        return False, None
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            response = await client.head(url, headers={"User-Agent": "AutoSEO/1.0 (+https://autoseo.app)"})
+            if response.status_code in (405, 403):
+                response = await client.get(url, headers={"User-Agent": "AutoSEO/1.0 (+https://autoseo.app)"})
+            return is_safe_url(str(response.url)) and 200 <= response.status_code < 400, response.status_code
+    except Exception:
+        return False, None
+
+
+async def _check_og_image(page_url: str, og_image: str | None) -> tuple[bool | None, int | None, str | None]:
+    if not og_image:
+        return None, None, None
+    candidate = urljoin(page_url, og_image)
+    ok, status_code = await _check_public_endpoint(candidate)
+    return ok, status_code, candidate
+
+
 async def _fetch_one(
     url: str,
     semaphore: asyncio.Semaphore,
@@ -222,6 +248,8 @@ async def _async_crawl(site_id: str, crawl_id: str):
 
                     robots = await get_robots_rules(domain)
                     delay = get_crawl_delay(robots)
+                    sitemap_ok, sitemap_status = await _check_public_endpoint(f"{domain.rstrip('/')}/sitemap.xml")
+                    robots_ok, robots_status = await _check_public_endpoint(f"{domain.rstrip('/')}/robots.txt")
 
                     raw_urls: list[str] = []
                     try:
@@ -364,6 +392,10 @@ async def _async_crawl(site_id: str, crawl_id: str):
                             signals["response_time_ms"] = response_time_ms
                             signals["page_type"] = classify_page_type(url, signals.get("schema_types"))
                             signals["broken_links_count"] = 0
+                            og_ok, og_status, og_checked_url = await _check_og_image(url, signals.get("og_image"))
+                            signals["og_image_valid"] = og_ok
+                            signals["og_image_status_code"] = og_status
+                            signals["og_image_checked_url"] = og_checked_url
                             signals["seo_score"] = calculate_page_score(signals)
 
                             page_record = Page(
@@ -436,6 +468,26 @@ async def _async_crawl(site_id: str, crawl_id: str):
                     await db.commit()
 
                     raw_issues = generate_issues(extracted)
+                    if not sitemap_ok:
+                        raw_issues.append({
+                            "page_id": None,
+                            "type": "missing_sitemap",
+                            "category": "technical",
+                            "severity": "medium",
+                            "impact_score": 50,
+                            "current_value": f"/sitemap.xml returned {sitemap_status or 'no response'}",
+                            "fix_type": "manual",
+                        })
+                    if not robots_ok:
+                        raw_issues.append({
+                            "page_id": None,
+                            "type": "missing_robots",
+                            "category": "technical",
+                            "severity": "medium",
+                            "impact_score": 45,
+                            "current_value": f"/robots.txt returned {robots_status or 'no response'}",
+                            "fix_type": "manual",
+                        })
                     try:
                         from packages.crawler.cannibalization import detect_cannibalization
 
@@ -524,6 +576,21 @@ async def _async_crawl(site_id: str, crawl_id: str):
 
                     site.status = "active" if getattr(site, "ownership_verified", False) else "pending_verification"
                     site.last_crawled_at = datetime.now(timezone.utc)
+                    from packages.shared.notifications import notify_org_users
+                    await notify_org_users(
+                        db,
+                        site.org_id,
+                        notification_type="crawl.completed",
+                        title=f"Crawl completed for {site.name}",
+                        body=f"{len(extracted)} pages scanned, {len(deduped_issues)} issues found, score {site_score}.",
+                        data={
+                            "site_id": site_id,
+                            "crawl_id": crawl_id,
+                            "pages_crawled": len(extracted),
+                            "issues_found": len(deduped_issues),
+                            "seo_score": site_score,
+                        },
+                    )
                     await db.commit()
 
                     try:

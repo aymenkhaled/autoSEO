@@ -1,5 +1,7 @@
 import ky from 'ky'
 import { supabase } from './supabase'
+import { SUPABASE_AUTH_ENABLED } from './auth-mode'
+import { clearLocalAccessToken, getLocalAccessToken } from './auth-storage'
 
 const API_BASE = typeof window !== 'undefined'
   ? window.location.origin
@@ -12,8 +14,9 @@ export const api = ky.extend({
   hooks: {
     beforeRequest: [
       async ({ request }) => {
-        const { data: { session } } = await supabase.auth.getSession()
-        const token = session?.access_token
+        const token = SUPABASE_AUTH_ENABLED && supabase
+          ? (await supabase.auth.getSession()).data.session?.access_token
+          : getLocalAccessToken()
         if (token) {
           request.headers.set('Authorization', `Bearer ${token}`)
         }
@@ -22,7 +25,14 @@ export const api = ky.extend({
     afterResponse: [
       async ({ response }) => {
         if (response.status === 401) {
-          await supabase.auth.signOut()
+          if (SUPABASE_AUTH_ENABLED && supabase) {
+            await supabase.auth.signOut()
+          } else {
+            clearLocalAccessToken()
+          }
+          if (typeof window === 'undefined') return
+          const isAuthScreen = window.location.pathname === '/login' || window.location.pathname === '/signup'
+          if (isAuthScreen) return
           window.location.href = '/login'
         }
       },
@@ -40,14 +50,19 @@ export const authApi = {
     api.post('auth/sync', { json: data }).json<any>(),
 }
 
+export const systemApi = {
+  readiness: () => api.get('system/readiness').json<any>(),
+}
+
 // Sites
 export const sitesApi = {
   list: (page = 1, perPage = 20) =>
     api.get('sites', { searchParams: { page, per_page: perPage } }).json<any>(),
   get: (id: string) => api.get(`sites/${id}`).json<any>(),
+  summary: (id: string) => api.get(`sites/${id}/summary`).json<any>(),
   create: (data: any) => api.post('sites', { json: data }).json<any>(),
   update: (id: string, data: any) => api.patch(`sites/${id}`, { json: data }).json<any>(),
-  delete: (id: string) => api.delete(`sites/${id}`),
+  delete: (id: string) => api.delete(`sites/${id}`).json<any>(),
 }
 
 // Crawls
@@ -63,6 +78,8 @@ export const crawlsApi = {
 export const issuesApi = {
   list: (params: Record<string, any> = {}) =>
     api.get('issues', { searchParams: params }).json<any>(),
+  aggregated: (params: Record<string, any> = {}) =>
+    api.get('issues/aggregated', { searchParams: params }).json<any>(),
   get: (id: string) => api.get(`issues/${id}`).json<any>(),
 }
 
@@ -83,6 +100,7 @@ export type ConnectionType = 'crawler' | 'snippet' | 'wordpress' | 'shopify' | '
 
 export interface ConnectionPayload {
   connection_type: ConnectionType
+  sandbox?: boolean
   site_url?: string
   username?: string
   app_password?: string
@@ -99,6 +117,8 @@ export interface ConnectionPayload {
 export const connectionsApi = {
   status: (siteId: string) =>
     api.get(`sites/${siteId}/connection`).json<any>(),
+  capabilities: (siteId: string) =>
+    api.get(`sites/${siteId}/connection/capabilities`).json<any>(),
   test: (siteId: string, payload: ConnectionPayload) =>
     api.post(`sites/${siteId}/connection/test`, { json: payload }).json<any>(),
   save: (siteId: string, payload: ConnectionPayload) =>
@@ -131,6 +151,10 @@ export const webhooksApi = {
   create: (data: any) => api.post('webhooks', { json: data }).json<any>(),
   test: (id: string) => api.post(`webhooks/${id}/test`).json<any>(),
   deliveries: (id: string) => api.get(`webhooks/${id}/deliveries`).json<any>(),
+}
+
+export const competitorsApi = {
+  analyze: (id: string) => api.post(`competitors/${id}/analyze`).json<any>(),
 }
 
 // Alias for pages that import apiClient directly

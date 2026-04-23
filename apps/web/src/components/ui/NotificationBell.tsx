@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bell, CheckCircle2, ExternalLink, FileText, RefreshCw, X } from 'lucide-react'
+import { AlertTriangle, Bell, CheckCircle2, ExternalLink, FileText, RefreshCw, X } from 'lucide-react'
 import { Link } from 'react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -10,7 +10,22 @@ const ICON_MAP: Record<string, { icon: any; color: string }> = {
   issue_critical: { icon: Bell, color: 'text-red-500 bg-red-500/10' },
   fix_applied: { icon: CheckCircle2, color: 'text-green-500 bg-green-500/10' },
   crawl_complete: { icon: RefreshCw, color: 'text-cyan-500 bg-cyan-500/10' },
+  'crawl.completed': { icon: RefreshCw, color: 'text-cyan-500 bg-cyan-500/10' },
+  'fix.deployed': { icon: CheckCircle2, color: 'text-green-500 bg-green-500/10' },
+  'fix.apply_failed': { icon: AlertTriangle, color: 'text-amber-500 bg-amber-500/10' },
+  'webhook.delivery': { icon: FileText, color: 'text-blue-500 bg-blue-500/10' },
   info: { icon: FileText, color: 'text-blue-500 bg-blue-500/10' },
+}
+
+function notificationTarget(notification: any) {
+  const data = notification?.data || {}
+  if (data.issue_id) return '/dashboard/fixes'
+  if (data.webhook_id) return '/dashboard/integrations'
+  if (data.site_id) return `/dashboard/sites/${data.site_id}`
+  if (notification?.type === 'webhook.delivery') return '/dashboard/integrations'
+  if (notification?.type?.startsWith('fix.')) return '/dashboard/fixes'
+  if (notification?.type?.startsWith('crawl.')) return '/dashboard/sites'
+  return '/dashboard/settings'
 }
 
 function timeAgo(iso: string): string {
@@ -99,6 +114,7 @@ export default function NotificationBell() {
                 notifications.map((notification: any) => {
                   const iconCfg = ICON_MAP[notification.type] ?? ICON_MAP.info
                   const Icon = iconCfg.icon
+                  const target = notificationTarget(notification)
                   return (
                     <div
                       key={notification.id}
@@ -118,7 +134,7 @@ export default function NotificationBell() {
                           <span className="text-[10px] text-muted-foreground">
                             {notification.created_at ? timeAgo(notification.created_at) : 'just now'}
                           </span>
-                          <Link to="/dashboard/settings" className="text-[10px] text-primary hover:underline flex items-center gap-0.5" onClick={() => setOpen(false)}>
+                          <Link to={target} className="text-[10px] text-primary hover:underline flex items-center gap-0.5" onClick={() => setOpen(false)}>
                             View <ExternalLink className="h-2.5 w-2.5" />
                           </Link>
                         </div>

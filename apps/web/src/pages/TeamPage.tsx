@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Users, Mail, Shield, Trash2, X, Crown, Eye } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api-client'
+import { apiClient, systemApi } from '@/lib/api-client'
+import { readinessMeta } from '@/lib/readiness'
 import { toast } from 'sonner'
 
 function useTeam() {
@@ -16,11 +17,11 @@ function useInvite() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: any) => apiClient.post('team/invite', { json: data }).json<any>(),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       qc.invalidateQueries({ queryKey: ['team'] })
-      toast.success('Invitation sent')
+      toast.success(result?.message || 'Invitation saved')
     },
-    onError: (e: any) => toast.error(e?.message || 'Failed to send invitation'),
+    onError: (e: any) => toast.error(e?.message || 'Failed to save invitation'),
   })
 }
 
@@ -51,12 +52,14 @@ function StatusDot({ status }: { status: string }) {
 
 export default function TeamPage() {
   const { data, isLoading } = useTeam()
+  const { data: readiness } = useQuery({ queryKey: ['system-readiness-team'], queryFn: () => systemApi.readiness() })
   const invite = useInvite()
   const remove = useRemoveMember()
   const [showInvite, setShowInvite] = useState(false)
   const [form, setForm] = useState({ email: '', role: 'member' })
 
   const members = data?.members ?? []
+  const inviteReadiness = readiness?.features?.team_invites
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,6 +80,12 @@ export default function TeamPage() {
           className="inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">
           <Plus className="h-4 w-4" /> Invite Member
         </button>
+      </div>
+
+      <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-4">
+        <p className="text-xs text-orange-100 leading-relaxed">
+          Team invites are currently <span className="font-semibold">{inviteReadiness?.label?.toLowerCase() || 'saved only'}</span>. {inviteReadiness?.description || 'The invite record is stored, but invite email delivery and acceptance flow are not wired yet.'}
+        </p>
       </div>
 
       <AnimatePresence>
@@ -140,6 +149,7 @@ export default function TeamPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Member</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Role</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Invite Flow</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -147,7 +157,7 @@ export default function TeamPage() {
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 4 }).map((_, j) => (
+                  {Array.from({ length: 5 }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 bg-muted rounded animate-pulse" />
                     </td>
@@ -156,7 +166,7 @@ export default function TeamPage() {
               ))
             ) : members.length === 0 ? (
               <tr>
-                <td colSpan={4}>
+                <td colSpan={5}>
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <Users className="h-10 w-10 text-muted-foreground/30 mb-3" />
                     <p className="text-sm text-muted-foreground">No team members yet</p>
@@ -190,6 +200,15 @@ export default function TeamPage() {
                       <StatusDot status={m.status} />
                       <span className="text-xs text-muted-foreground capitalize">{m.status}</span>
                     </div>
+                  </td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    {m.delivery_state ? (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${readinessMeta(m.delivery_state.state).className}`}>
+                        {m.delivery_state.label}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Working</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {!m.is_self && (

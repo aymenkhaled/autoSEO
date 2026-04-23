@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from models.tables import Keyword, KeywordRanking
+from packages.shared.readiness import READINESS_TRACKING_ONLY, READINESS_UNAVAILABLE_WITHOUT_PROVIDER, readiness_payload
 
 router = APIRouter(tags=["keywords"])
 
@@ -74,7 +75,20 @@ async def list_keywords(
                 "checked_at": latest_ranking.checked_at.isoformat() if latest_ranking.checked_at else None,
             } if latest_ranking else None,
         })
-    return {"keywords": kw_list, "total": len(kw_list)}
+    return {
+        "keywords": kw_list,
+        "total": len(kw_list),
+        "readiness": readiness_payload(
+            READINESS_TRACKING_ONLY,
+            label="Tracking only",
+            description="Keywords are stored by site, intent, and priority. Ranking history stays empty until a SERP provider or manual import is connected.",
+        ),
+        "provider_gap": readiness_payload(
+            READINESS_UNAVAILABLE_WITHOUT_PROVIDER,
+            label="Ranking data missing",
+            description="Live rankings, search volume, and SERP features still need an external ranking data source.",
+        ),
+    }
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

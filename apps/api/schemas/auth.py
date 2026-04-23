@@ -10,7 +10,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
-    org_name: str = Field(min_length=1, max_length=255)
+    org_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
 
 
 class LoginRequest(BaseModel):
@@ -65,3 +65,6 @@ class AuthContext(BaseModel):
     org_id: UUID
     role: str
     email: str
+    auth_method: str = "jwt"
+    api_key_id: Optional[UUID] = None
+    scopes: list[str] = Field(default_factory=list)

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from 'next-themes'
+import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, Globe, Bug, Wrench, BarChart3,
   Settings, Zap, ChevronLeft, ChevronRight,
@@ -11,6 +12,7 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 import { useAppStore } from '@/stores/app-store'
 import NotificationBell from '@/components/ui/NotificationBell'
+import { authApi, systemApi } from '@/lib/api-client'
 
 const NAV_GROUPS = [
   {
@@ -66,11 +68,15 @@ function ThemeToggle() {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const { user, signOut } = useAuth()
+  const { signOut, user } = useAuth()
   const { sidebarOpen, toggleSidebar } = useAppStore()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { data: org } = useQuery({ queryKey: ['org-layout'], queryFn: () => authApi.getOrg() })
+  const { data: readiness } = useQuery({ queryKey: ['system-readiness-layout'], queryFn: () => systemApi.readiness() })
 
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??'
+  const planLabel = `${org?.plan || 'free'} plan`
+  const authLabel = readiness?.auth_mode === 'supabase' ? 'Supabase auth' : 'Local auth'
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -144,7 +150,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 exit={{ opacity: 0, width: 0 }} transition={{ duration: 0.2 }}
                 className="flex-1 min-w-0 overflow-hidden">
                 <p className="text-xs font-medium text-foreground truncate">{user?.email ?? 'User'}</p>
-                <p className="text-[10px] text-muted-foreground">Free plan</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{planLabel} · {authLabel}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -211,7 +217,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white">{initials}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{user?.email ?? 'User'}</p>
-                    <p className="text-[10px] text-muted-foreground">Free plan</p>
+                    <p className="text-[10px] text-muted-foreground capitalize">{planLabel} · {authLabel}</p>
                   </div>
                   <button onClick={signOut} className="p-1 text-muted-foreground hover:text-foreground">
                     <LogOut className="h-3.5 w-3.5" />

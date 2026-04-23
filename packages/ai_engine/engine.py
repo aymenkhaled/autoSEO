@@ -1,9 +1,8 @@
 """AutoSEO AI Engine — Claude-powered SEO fix generation.
 
-All methods in this module are fully implemented and ready to use.
-They require the ANTHROPIC_API_KEY environment variable to be set.
-When the key is not present, methods return structured placeholder responses
-so the rest of the system can be developed and tested without API costs.
+AI generation is available only when ANTHROPIC_API_KEY is configured.
+When the provider is unavailable, callers should surface an honest readiness
+state instead of persisting placeholder suggestions.
 """
 from __future__ import annotations
 
@@ -24,6 +23,14 @@ from packages.shared.seo_domain import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class AIProviderUnavailable(RuntimeError):
+    """Raised when an AI-backed action is requested without Anthropic config."""
+
+
+def is_ai_configured() -> bool:
+    return bool(os.getenv("ANTHROPIC_API_KEY", ""))
 
 # ─── Data Structures ─────────────────────────────────────────────────────────
 
@@ -66,7 +73,7 @@ def _get_client():
     """Return Anthropic client or raise if key missing."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
-        raise RuntimeError(
+        raise AIProviderUnavailable(
             "ANTHROPIC_API_KEY is not set. "
             "Add it to your environment secrets to enable AI features."
         )
@@ -294,16 +301,9 @@ async def generate_fix(
     content_excerpt: str = "",
     target_keywords: str = "",
 ) -> FixResult:
-    """Generate an AI-powered SEO fix using Claude.
-
-    Returns a stub response when ANTHROPIC_API_KEY is not set, allowing
-    the full application to be used and tested without an API key.
-    """
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-    if not api_key:
-        log.warning("ANTHROPIC_API_KEY not set — returning stub fix for issue_type=%s", issue_type)
-        return _stub_fix(issue_type, current_value)
+    """Generate an AI-powered SEO fix using Claude."""
+    if not is_ai_configured():
+        raise AIProviderUnavailable("ANTHROPIC_API_KEY is not set")
 
     issue_type = normalize_issue_type(issue_type)
     model = "claude-haiku-3-5" if _use_haiku(issue_type) else "claude-sonnet-4-5"
@@ -367,33 +367,10 @@ async def generate_fix(
 
     except json.JSONDecodeError as exc:
         log.error("Claude returned non-JSON response: %s — %s", raw, exc)
-        return _stub_fix(issue_type, current_value, error=str(exc))
+        raise RuntimeError("Anthropic returned invalid JSON for fix generation") from exc
     except Exception as exc:
         log.error("Claude API call failed: %s", exc)
         raise
-
-
-def _stub_fix(issue_type: str, current_value: str, error: str = "") -> FixResult:
-    """Return a clearly-labelled placeholder fix when API key is absent."""
-    issue_type = normalize_issue_type(issue_type)
-    stubs: dict[str, str] = {
-        ISSUE_MISSING_META_DESCRIPTION: "Discover how AutoSEO automatically finds and fixes SEO issues on your website. Start your free trial today.",
-        ISSUE_IMAGES_MISSING_ALT_TEXT: "A descriptive image alt text would go here (AI key required for generation)",
-        ISSUE_TITLE_TOO_LONG: (current_value or "Page title")[:57] if current_value else "Page Title — AutoSEO",
-        "missing_h1": "Main Page Heading",
-        "duplicate_title": f"Unique: {current_value[:45]}" if current_value else "Unique Page Title",
-    }
-    fix = stubs.get(issue_type, f"[AI fix for {issue_type} — ANTHROPIC_API_KEY required]")
-    return FixResult(
-        fix=fix,
-        confidence=0.0,
-        reasoning="Stub response — connect ANTHROPIC_API_KEY to enable real AI fixes",
-        tier=2,
-        model_used="none",
-        input_tokens=0,
-        output_tokens=0,
-        cost_usd=0.0,
-    )
 
 
 # ─── Content Brief ────────────────────────────────────────────────────────────
@@ -421,26 +398,8 @@ async def generate_content_brief(
     competitor_titles: list[str] | None = None,
 ) -> ContentBriefResult:
     """Generate a content brief for a target keyword using Claude."""
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-
-    if not api_key:
-        log.warning("ANTHROPIC_API_KEY not set — returning stub content brief")
-        return ContentBriefResult(
-            title=f"The Complete Guide to {keyword.title()}",
-            target_keyword=keyword,
-            outline=[
-                "## Introduction",
-                f"## What is {keyword.title()}?",
-                "## Key Benefits",
-                "## How to Get Started",
-                "## Best Practices",
-                "## Common Mistakes to Avoid",
-                "## Conclusion",
-            ],
-            suggested_word_count=2000,
-            tone="professional",
-            notes="[Stub brief — connect ANTHROPIC_API_KEY to generate real content briefs]",
-        )
+    if not is_ai_configured():
+        raise AIProviderUnavailable("ANTHROPIC_API_KEY is not set")
 
     try:
         client = _get_client()

@@ -3,9 +3,10 @@ import { motion } from 'framer-motion'
 import { Wrench, Clock, CheckCircle2, RotateCcw, ArrowRight, Sparkles, Zap, Loader2, AlertTriangle, Globe, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api-client'
+import { apiClient, systemApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { useSites } from '@/hooks/use-data'
+import { readinessMeta } from '@/lib/readiness'
 
 function useFixableIssues(fixStatus: string, siteId?: string | null) {
   const searchParams: Record<string, string> = {
@@ -67,6 +68,10 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 export default function FixesPage() {
   const { data: sitesData } = useSites()
+  const { data: readiness } = useQuery({
+    queryKey: ['system-readiness-fixes'],
+    queryFn: () => systemApi.readiness(),
+  })
   const sites: any[] = sitesData?.sites ?? []
   const [siteId, setSiteId] = useState<string | null>(null)
 
@@ -83,6 +88,8 @@ export default function FixesPage() {
   const pendingCount = pendingData?.total ?? 0
   const appliedCount = appliedData?.total ?? 0
   const rolledBackCount = rolledBackData?.total ?? 0
+  const aiReadiness = readiness?.features?.ai_fixes
+  const aiReadinessMeta = readinessMeta(aiReadiness?.state)
 
   return (
     <div className="space-y-6">
@@ -102,6 +109,20 @@ export default function FixesPage() {
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
       </div>
+
+      {aiReadiness && aiReadiness.state !== 'working' && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 text-amber-300 mt-0.5" />
+            <div className="space-y-2">
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${aiReadinessMeta.className}`}>
+                {aiReadiness.label}
+              </span>
+              <p className="text-xs text-amber-100 leading-relaxed">{aiReadiness.description}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-4">

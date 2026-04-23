@@ -27,6 +27,8 @@ from schemas.connection import (
 from models.tables import Site
 from packages.cms_adapters import get_adapter
 from packages.shared.encryption import encrypt_credential
+from packages.shared.readiness import connection_status_payload
+from packages.shared.seo_domain import CONNECTION_CAPABILITY_SUMMARY, connection_capabilities
 from config import get_settings
 
 router = APIRouter(tags=["connections"])
@@ -91,6 +93,27 @@ async def _get_site(db: AsyncSession, site_id: UUID, org_id) -> Site:
     return site
 
 
+def _status_response(site: Site) -> ConnectionStatusResponse:
+    snippet_token = str(site.snippet_token) if site.snippet_token else None
+    payload = connection_status_payload(site)
+    return ConnectionStatusResponse(
+        connection_type=site.connection_type,  # type: ignore[arg-type]
+        configured=payload["configured"],
+        monitoring_mode=payload["monitoring_mode"],
+        monitoring_mode_label=payload["monitoring_mode_label"],
+        write_integration=payload["write_integration"],
+        write_integration_label=payload["write_integration_label"],
+        write_integration_configured=payload["write_integration_configured"],
+        auto_deploy_capable=payload["auto_deploy_capable"],
+        supported_fix_fields=list(payload["supported_fix_fields"]),
+        readiness=payload["readiness"],
+        readiness_label=payload["readiness_label"],
+        explanation=payload["explanation"],
+        snippet_token=snippet_token,
+        snippet_url=f"{settings.API_URL.rstrip('/')}/api/v1/snippet/{snippet_token}.js" if snippet_token else None,
+    )
+
+
 @router.get("/{site_id}/connection", response_model=ConnectionStatusResponse)
 async def get_connection_status(
     site_id: UUID,
@@ -98,13 +121,24 @@ async def get_connection_status(
     db: AsyncSession = Depends(get_db),
 ):
     site = await _get_site(db, site_id, auth.org_id)
-    snippet_token = str(site.snippet_token) if site.snippet_token else None
-    return ConnectionStatusResponse(
-        connection_type=site.connection_type,  # type: ignore[arg-type]
-        configured=bool(site.cms_token_encrypted) or site.connection_type in ("crawler", "snippet"),
-        snippet_token=snippet_token,
-        snippet_url=f"{settings.API_URL.rstrip('/')}/api/v1/snippet/{snippet_token}.js" if snippet_token else None,
-    )
+    return _status_response(site)
+
+
+@router.get("/{site_id}/connection/capabilities")
+async def get_connection_capabilities(
+    site_id: UUID,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    site = await _get_site(db, site_id, auth.org_id)
+    return {
+        "current_connection_type": site.connection_type,
+        "current_status": connection_status_payload(site),
+        "capabilities": [
+            connection_capabilities(connection_type)
+            for connection_type in CONNECTION_CAPABILITY_SUMMARY.keys()
+        ],
+    }
 
 
 @router.post("/{site_id}/connection/test", response_model=ConnectionTestResponse)
@@ -119,6 +153,15 @@ async def test_connection(
     Does NOT persist anything — use PUT /connection to save after a successful test.
     """
     site = await _get_site(db, site_id, auth.org_id)
+    if creds.sandbox:
+        caps = connection_capabilities(creds.connection_type)
+        return ConnectionTestResponse(
+            success=True,
+            message=(
+                f"Sandbox check passed for {caps['label']}. "
+                "No external credentials were used and nothing was saved."
+            ),
+        )
     try:
         adapter = get_adapter(creds.connection_type, **_build_kwargs(creds, site))
     except Exception as exc:
@@ -142,6 +185,11 @@ async def save_connection(
 ):
     """Persist credentials (encrypted with per-tenant AES-256-GCM key)."""
     site = await _get_site(db, site_id, auth.org_id)
+    if creds.sandbox:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Sandbox checks are test-only and cannot be saved as a real connection",
+        )
 
     # Always re-test before saving to avoid storing dud creds
     if creds.connection_type not in ("crawler", "snippet"):
@@ -173,15 +221,9 @@ async def save_connection(
 
     await db.commit()
     await db.refresh(site)
-
-    snippet_token = str(site.snippet_token) if site.snippet_token else None
-    return ConnectionStatusResponse(
-        connection_type=site.connection_type,  # type: ignore[arg-type]
-        configured=True,
-        last_tested_at=datetime.now(timezone.utc).isoformat(),
-        snippet_token=snippet_token,
-        snippet_url=f"{settings.API_URL.rstrip('/')}/api/v1/snippet/{snippet_token}.js" if snippet_token else None,
-    )
+    response = _status_response(site)
+    response.last_tested_at = datetime.now(timezone.utc).isoformat()
+    return response
 
 
 @router.delete("/{site_id}/connection", status_code=status.HTTP_204_NO_CONTENT)

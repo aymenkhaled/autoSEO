@@ -4,7 +4,11 @@ import {
   Plus, Globe, ExternalLink, MoreVertical, Trash2,
   Settings, Play, Loader2, X, ChevronDown,
 } from 'lucide-react'
-import { useSites, useCreateSite, useDeleteSite, useTriggerCrawl } from '@/hooks/use-data'
+import { useNavigate } from 'react-router'
+
+import { DeleteSiteDialog } from '@/components/sites/DeleteSiteDialog'
+import { useSites, useCreateSite, useTriggerCrawl } from '@/hooks/use-data'
+import { connectionSummary, deriveSiteCardState } from '@/lib/readiness'
 import { formatRelativeTime } from '@/lib/utils'
 
 const CONNECTION_TYPES = [
@@ -16,29 +20,15 @@ const CONNECTION_TYPES = [
   { value: 'snippet', label: 'JS Snippet' },
 ]
 
-const CONNECTION_LABELS: Record<string, string> = {
-  crawler: 'Crawler', wordpress: 'WordPress', shopify: 'Shopify',
-  webflow: 'Webflow', github: 'GitHub', snippet: 'JS Snippet',
-}
-
-function statusConfig(status: string) {
-  const m: Record<string, { dot: string; label: string }> = {
-    active:   { dot: 'bg-green-500',  label: 'Active' },
-    crawling: { dot: 'bg-amber-500 animate-pulse', label: 'Crawling' },
-    error:    { dot: 'bg-red-500',    label: 'Error' },
-    inactive: { dot: 'bg-slate-400',  label: 'Inactive' },
-  }
-  return m[status] ?? m.inactive
-}
-
 export default function SitesPage() {
+  const navigate = useNavigate()
   const { data, isLoading } = useSites()
   const createSite = useCreateSite()
-  const deleteSite = useDeleteSite()
   const triggerCrawl = useTriggerCrawl()
   const [showAdd, setShowAdd] = useState(false)
   const [newSite, setNewSite] = useState({ name: '', domain: '', connection_type: 'crawler' })
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
+  const [siteToDelete, setSiteToDelete] = useState<any | null>(null)
 
   const sites = data?.sites ?? []
 
@@ -88,12 +78,14 @@ export default function SitesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {sites.map((site: any, i: number) => {
-            const status = statusConfig(site.status ?? 'inactive')
+            const status = deriveSiteCardState(site)
+            const connection = connectionSummary(site)
             return (
               <motion.div key={site.id}
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="relative bg-card border border-border rounded-xl p-5 group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                onClick={() => navigate(`/dashboard/sites/${site.id}?tab=setup`)}
+                className="relative cursor-pointer bg-card border border-border rounded-xl p-5 group hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -102,6 +94,7 @@ export default function SitesPage() {
                     <div className="min-w-0">
                       <h3 className="text-sm font-semibold text-foreground truncate">{site.name}</h3>
                       <a href={site.domain} target="_blank" rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
                         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors truncate">
                         {site.domain?.replace('https://', '')}
                         <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -110,7 +103,10 @@ export default function SitesPage() {
                   </div>
 
                   <div className="relative flex-shrink-0">
-                    <button onClick={() => setMenuOpen(menuOpen === site.id ? null : site.id)}
+                    <button onClick={(event) => {
+                      event.stopPropagation()
+                      setMenuOpen(menuOpen === site.id ? null : site.id)
+                    }}
                       className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-all">
                       <MoreVertical className="h-4 w-4" />
                     </button>
@@ -119,15 +115,31 @@ export default function SitesPage() {
                         <motion.div initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: -4 }} transition={{ duration: 0.1 }}
                           className="absolute right-0 mt-1 w-40 rounded-xl bg-popover border border-border shadow-lg py-1 z-50">
-                          <button onClick={() => { triggerCrawl.mutate(site.id); setMenuOpen(null) }}
+                          <button onClick={(event) => {
+                            event.stopPropagation()
+                            triggerCrawl.mutate(site.id)
+                            setMenuOpen(null)
+                          }}
                             className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left">
                             <Play className="h-3.5 w-3.5 text-muted-foreground" /> Run Crawl
                           </button>
-                          <button className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              navigate(`/dashboard/sites/${site.id}?tab=setup`)
+                              setMenuOpen(null)
+                            }}
+                            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors text-left"
+                          >
                             <Settings className="h-3.5 w-3.5 text-muted-foreground" /> Settings
                           </button>
                           <div className="h-px bg-border mx-2 my-1" />
-                          <button onClick={() => { deleteSite.mutate(site.id); setMenuOpen(null) }}
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setSiteToDelete(site)
+                              setMenuOpen(null)
+                            }}
                             className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-500/5 transition-colors text-left">
                             <Trash2 className="h-3.5 w-3.5" /> Delete
                           </button>
@@ -142,8 +154,17 @@ export default function SitesPage() {
                     <div className={`w-2 h-2 rounded-full ${status.dot}`} />
                     <span className="text-xs text-muted-foreground">{status.label}</span>
                   </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
-                    {CONNECTION_LABELS[site.connection_type] ?? site.connection_type}
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                    {connection.monitoringLabel}
+                  </span>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    Write: {connection.writeLabel}
+                  </span>
+                  <span className="rounded-full border border-border bg-muted/40 px-2 py-0.5">
+                    {site.ownership_verified ? 'Verified' : 'Needs verification'}
                   </span>
                 </div>
 
@@ -217,6 +238,12 @@ export default function SitesPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <DeleteSiteDialog
+        site={siteToDelete}
+        open={!!siteToDelete}
+        onClose={() => setSiteToDelete(null)}
+      />
     </div>
   )
 }

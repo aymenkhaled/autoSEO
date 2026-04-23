@@ -20,6 +20,86 @@ from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, issue_is_auto_fixabl
 router = APIRouter(tags=["issues"])
 
 
+ISSUE_GUIDANCE = {
+    "spa_no_prerender": {
+        "title": "Pages render as an empty SPA shell",
+        "summary": "Search crawlers are receiving the JavaScript shell instead of page-specific HTML.",
+        "why_it_matters": "If the initial HTML has no real content, titles, headings, or body copy per route, indexability can collapse even when the browser looks fine.",
+        "recommended_fix": "Add SSR/prerendering for public routes, or generate static HTML per route before crawl/index time.",
+        "severity_explanation": "Critical because crawlers can miss the actual page content.",
+    },
+    "duplicate_title": {
+        "title": "Multiple pages share the same title",
+        "summary": "Routes are reusing one static title instead of a unique title per page.",
+        "why_it_matters": "Duplicate titles make pages compete with each other and reduce click relevance in search results.",
+        "recommended_fix": "Generate a unique title per route from route metadata, CMS fields, or server-rendered head tags.",
+        "severity_explanation": "High/medium depending on how many URLs share the same title.",
+    },
+    "keyword_cannibalization": {
+        "title": "Pages target the same search intent",
+        "summary": "Several URLs appear to target the same primary query.",
+        "why_it_matters": "Search engines may rotate or split ranking signals across similar pages.",
+        "recommended_fix": "Merge overlapping pages, canonicalize weaker pages, or rewrite each page for a distinct intent.",
+        "severity_explanation": "Medium because it usually degrades performance rather than fully blocking indexing.",
+    },
+    "stale_schema_date": {
+        "title": "Structured data contains an expired offer date",
+        "summary": "JSON-LD includes priceValidUntil/validThrough values that are already in the past.",
+        "why_it_matters": "Expired offer markup can make rich results invalid or misleading.",
+        "recommended_fix": "Update or remove expired date fields in Product/Offer JSON-LD.",
+        "severity_explanation": "Medium because it affects rich-result eligibility and trust.",
+    },
+    "unverified_review_schema": {
+        "title": "Review/rating schema needs proof",
+        "summary": "JSON-LD includes aggregateRating or named reviews that should match real visible review sources.",
+        "why_it_matters": "Unsupported review markup can violate Google review-snippet policy and create manual-action risk.",
+        "recommended_fix": "Remove fake/testimonial-only review markup, or connect it to real first-party reviews visible on the page.",
+        "severity_explanation": "High because policy violations can affect rich results and trust.",
+    },
+    "missing_sitemap": {
+        "title": "Missing sitemap.xml",
+        "summary": "AutoSEO could not verify a public /sitemap.xml endpoint.",
+        "why_it_matters": "Sitemaps help discovery, freshness, and large-site crawl coverage.",
+        "recommended_fix": "Publish a valid XML sitemap and reference it from robots.txt.",
+        "severity_explanation": "Medium because discovery may still work through links, but coverage is weaker.",
+    },
+    "missing_robots": {
+        "title": "Missing robots.txt",
+        "summary": "AutoSEO could not verify a public /robots.txt endpoint.",
+        "why_it_matters": "robots.txt documents crawler rules and is the standard place to advertise sitemaps.",
+        "recommended_fix": "Publish robots.txt with sensible allow rules and a Sitemap directive.",
+        "severity_explanation": "Medium because absence is allowed, but it removes crawler guidance.",
+    },
+    "missing_offer_schema": {
+        "title": "Visible offer missing from JSON-LD",
+        "summary": "A visible lifetime/$499 offer appears on the page but is absent from structured data offers.",
+        "why_it_matters": "Search engines and integrations may see incomplete pricing data.",
+        "recommended_fix": "Add the missing offer to Product/Offer JSON-LD or remove stale/incomplete offer markup.",
+        "severity_explanation": "Medium because it affects structured-data completeness.",
+    },
+    "broken_og_image": {
+        "title": "Open Graph image is missing or unreachable",
+        "summary": "The og:image URL could not be validated as a public reachable asset.",
+        "why_it_matters": "Broken OG images make social shares look empty or untrusted.",
+        "recommended_fix": "Use an absolute public HTTPS image URL and confirm it returns 200.",
+        "severity_explanation": "Medium because it affects sharing, not core indexability.",
+    },
+}
+
+
+DEFAULT_GUIDANCE = {
+    "title": "SEO issue",
+    "summary": "AutoSEO found a repeated SEO signal that needs review.",
+    "why_it_matters": "Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.",
+    "recommended_fix": "Review the affected URLs and update the underlying template, CMS field, or route metadata.",
+    "severity_explanation": "Severity is based on estimated SEO impact and affected page count.",
+}
+
+
+def _guidance(issue_type: str) -> dict:
+    return {**DEFAULT_GUIDANCE, **ISSUE_GUIDANCE.get(issue_type, {})}
+
+
 @router.get("", response_model=IssueListResponse)
 async def list_issues(
     site_id: UUID = Query(None),
@@ -111,18 +191,23 @@ async def list_aggregated_issues(
         .order_by(func.sum(Issue.impact_score).desc())
     )).all()
 
-    # For each group, fetch up to 5 sample URLs (joined to pages)
+    # For each group, fetch examples (joined to pages when available). Site-wide
+    # issues such as missing_sitemap intentionally have no page_id.
     out = []
     for row in agg:
-        sample_urls = (await db.execute(
-            select(Page.url)
-            .join(Issue, Issue.page_id == Page.id)
-            .where(*conditions, Issue.type == row.type)
-            .limit(5)
-        )).scalars().all()
+        examples = (await db.execute(
+            select(Issue.id, Issue.current_value, Page.url)
+            .join(Page, Issue.page_id == Page.id, isouter=True)
+            .where(*conditions, Issue.type == row.type, Issue.category == row.category)
+            .order_by(Issue.impact_score.desc(), Issue.created_at.desc())
+            .limit(8)
+        )).all()
+        guidance = _guidance(row.type)
+        sample_urls = [url for _, _, url in examples if url]
 
         out.append({
             "type": row.type,
+            **guidance,
             "category": row.category,
             "severity": row.severity,
             "count": int(row.count or 0),
@@ -130,9 +215,21 @@ async def list_aggregated_issues(
             "fix_type": row.fix_type,
             "can_bulk_fix": issue_is_auto_fixable(row.type),
             "sample_urls": list(sample_urls),
+            "examples": [
+                {
+                    "issue_id": str(issue_id),
+                    "url": url,
+                    "current_value": current_value,
+                }
+                for issue_id, current_value, url in examples
+            ],
         })
 
-    return {"groups": out, "total_groups": len(out)}
+    return {
+        "groups": out,
+        "total_groups": len(out),
+        "note": "Use issue categories and root-cause groups over raw totals; crawl limits, free-tier sampling, and pagination can change the number of rows without changing the underlying problems.",
+    }
 
 
 @router.get("/{issue_id}", response_model=IssueResponse)

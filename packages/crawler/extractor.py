@@ -235,11 +235,15 @@ class SEOExtractor:
         for d in schemas:
             stale_dates.extend(_find_stale_offer_dates(d))
 
+        page_text = self.soup.get_text(" ", strip=True)
         return {
+            "schema_jsonld": schemas,
             "schema_types": [str(t) for t in types],
             "schema_valid": len(errors) == 0,
             "schema_errors": errors if errors else None,
             "stale_offer_dates": stale_dates if stale_dates else None,
+            "review_schema_risks": _find_review_policy_risks(schemas) or None,
+            "missing_visible_offer_schema": _detect_missing_visible_offer_schema(schemas, page_text),
         }
 
     def _social(self) -> dict:
@@ -328,6 +332,67 @@ def _find_stale_offer_dates(node, found: list[str] | None = None) -> list[str]:
         for v in node:
             _find_stale_offer_dates(v, found)
     return found
+
+
+def _iter_schema_nodes(node):
+    if isinstance(node, dict):
+        yield node
+        for value in node.values():
+            yield from _iter_schema_nodes(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _iter_schema_nodes(value)
+
+
+def _find_review_policy_risks(schemas: list) -> list[str]:
+    """Flag review/rating claims that need proof before Google can trust them."""
+    risks: list[str] = []
+    for schema in schemas:
+        for node in _iter_schema_nodes(schema):
+            if not isinstance(node, dict):
+                continue
+            aggregate = node.get("aggregateRating")
+            reviews = node.get("review") or node.get("reviews")
+            if aggregate:
+                rating = aggregate.get("ratingValue") if isinstance(aggregate, dict) else aggregate
+                count = aggregate.get("reviewCount") if isinstance(aggregate, dict) else None
+                risks.append(f"aggregateRating rating={rating} reviewCount={count}")
+            if reviews:
+                review_list = reviews if isinstance(reviews, list) else [reviews]
+                names: list[str] = []
+                for review in review_list[:5]:
+                    if not isinstance(review, dict):
+                        continue
+                    author = review.get("author")
+                    name = author.get("name") if isinstance(author, dict) else author
+                    if name:
+                        names.append(str(name))
+                risks.append(
+                    "Review markup includes named reviews"
+                    + (f": {', '.join(names[:3])}" if names else "")
+                )
+    return list(dict.fromkeys(risks))
+
+
+def _detect_missing_visible_offer_schema(schemas: list, page_text: str) -> bool:
+    text = (page_text or "").lower()
+    has_lifetime_offer = "lifetime" in text and ("$499" in text or "499" in text)
+    if not has_lifetime_offer:
+        return False
+
+    has_offer_schema = False
+    has_499_offer = False
+    for schema in schemas:
+        for node in _iter_schema_nodes(schema):
+            if not isinstance(node, dict):
+                continue
+            node_type = str(node.get("@type", "")).lower()
+            if "offer" in node_type or "price" in node or "offers" in node:
+                has_offer_schema = True
+                packed = json.dumps(node, default=str).lower()
+                if "499" in packed or "lifetime" in packed:
+                    has_499_offer = True
+    return has_offer_schema and not has_499_offer
 
 
 def _parse_link_header_canonical(link_header: str | None) -> str | None:
@@ -477,6 +542,30 @@ def generate_issues(pages: list[dict]) -> list[dict]:
                     "severity": "medium", "impact_score": 40,
                     "current_value": stale,
                     "fix_type": "auto",
+                })
+            for risk in (page.get("review_schema_risks") or []):
+                issues.append({
+                    "page_id": page_id, "url": url,
+                    "type": "unverified_review_schema", "category": "schema",
+                    "severity": "high", "impact_score": 70,
+                    "current_value": risk,
+                    "fix_type": "manual",
+                })
+            if page.get("missing_visible_offer_schema"):
+                issues.append({
+                    "page_id": page_id, "url": url,
+                    "type": "missing_offer_schema", "category": "schema",
+                    "severity": "medium", "impact_score": 45,
+                    "current_value": "Visible lifetime/$499 offer is not represented in JSON-LD offers",
+                    "fix_type": "auto",
+                })
+            if page.get("og_image_valid") is False:
+                issues.append({
+                    "page_id": page_id, "url": url,
+                    "type": "broken_og_image", "category": "social",
+                    "severity": "medium", "impact_score": 45,
+                    "current_value": page.get("og_image") or "og:image missing or unreachable",
+                    "fix_type": "manual",
                 })
             continue
 
@@ -689,6 +778,33 @@ def generate_issues(pages: list[dict]) -> list[dict]:
                 "fix_type": "auto",
             })
 
+        for risk in (page.get("review_schema_risks") or []):
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "unverified_review_schema", "category": "schema",
+                "severity": "high", "impact_score": 70,
+                "current_value": risk,
+                "fix_type": "manual",
+            })
+
+        if page.get("missing_visible_offer_schema"):
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "missing_offer_schema", "category": "schema",
+                "severity": "medium", "impact_score": 45,
+                "current_value": "Visible lifetime/$499 offer is not represented in JSON-LD offers",
+                "fix_type": "auto",
+            })
+
+        if page.get("og_image_valid") is False:
+            issues.append({
+                "page_id": page_id, "url": url,
+                "type": "broken_og_image", "category": "social",
+                "severity": "medium", "impact_score": 45,
+                "current_value": page.get("og_image") or "og:image missing or unreachable",
+                "fix_type": "manual",
+            })
+
     # Site-wide aggregate detection: dedupe symptoms into one root-cause issue
     issues.extend(detect_sitewide_duplicates(pages))
 
@@ -708,8 +824,6 @@ def detect_sitewide_duplicates(pages: list[dict]) -> list[dict]:
     by_title: dict[str, list[dict]] = defaultdict(list)
     by_meta: dict[str, list[dict]] = defaultdict(list)
     for p in pages:
-        if p.get("is_spa_shell"):
-            continue  # SPA shells trivially share the same shell HTML
         t = (p.get("title") or "").strip().lower()
         if t:
             by_title[t].append(p)

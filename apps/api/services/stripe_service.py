@@ -7,14 +7,23 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 # Plan limits
 PLAN_LIMITS = {
-    "starter": {
+    "free": {
         "max_sites": 1,
-        "max_pages_per_crawl": 100,
+        "max_pages_per_crawl": 50,
         "crawl_frequency": ["monthly"],
         "ai_fixes": False,
         "cms_integrations": False,
         "github_integration": False,
         "api_access": False,
+    },
+    "starter": {
+        "max_sites": 5,
+        "max_pages_per_crawl": 500,
+        "crawl_frequency": ["weekly", "monthly"],
+        "ai_fixes": True,
+        "cms_integrations": True,
+        "github_integration": True,
+        "api_access": True,
     },
     "pro": {
         "max_sites": 10,
@@ -85,7 +94,7 @@ async def create_portal_session(customer_id: str, return_url: str) -> str:
 
 def get_plan_limits(plan: str) -> dict:
     """Get the limits for a given plan."""
-    return PLAN_LIMITS.get(plan, PLAN_LIMITS["starter"])
+    return PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
 
 
 def can_add_site(plan: str, current_site_count: int) -> bool:

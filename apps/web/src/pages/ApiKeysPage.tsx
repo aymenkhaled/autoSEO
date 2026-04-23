@@ -35,11 +35,11 @@ function useRevokeKey() {
 }
 
 const ALL_SCOPES = [
-  { value: 'read:sites', label: 'Read Sites', description: 'List and view site details' },
-  { value: 'write:sites', label: 'Write Sites', description: 'Create and update sites' },
+  { value: 'read:sites', label: 'Read Sites', description: 'List sites, crawls, keywords, competitors, snippets, connections, and webhooks' },
+  { value: 'write:sites', label: 'Write Sites', description: 'Create/update sites and mutate site-owned flows like crawls, connections, keywords, competitors, webhooks, and report schedules' },
   { value: 'read:issues', label: 'Read Issues', description: 'View SEO issues' },
   { value: 'write:fixes', label: 'Write Fixes', description: 'Apply and rollback fixes' },
-  { value: 'read:analytics', label: 'Read Analytics', description: 'Access analytics data' },
+  { value: 'read:analytics', label: 'Read Analytics', description: 'Access dashboard, analytics, and on-demand report data' },
 ]
 
 export default function ApiKeysPage() {
@@ -50,6 +50,7 @@ export default function ApiKeysPage() {
   const [form, setForm] = useState({ name: '', scopes: [] as string[] })
   const [newKey, setNewKey] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const apiBase = typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8001'
 
   const keys = data?.api_keys ?? []
 
@@ -117,6 +118,26 @@ export default function ApiKeysPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <Shield className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">How API keys work now</h2>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          API keys are accepted by the backend and scoped. Use `read:sites` for site, crawl, keyword, competitor, snippet, and webhook reads; `write:sites` for site-owned mutations; `read:issues` for issue/change-log reads; `write:fixes` for fix actions; and `read:analytics` for dashboard/report generation reads. JWT-only routes like auth, team, notifications, usage, and API-key management still reject API keys.
+        </p>
+        <div className="grid md:grid-cols-2 gap-3">
+          <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
+{`curl ${apiBase}/api/v1/sites \\
+  -H "Authorization: Bearer autoseo_YOUR_KEY"`}
+          </code>
+          <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
+{`curl ${apiBase}/api/v1/issues \\
+  -H "X-AutoSEO-Key: autoseo_YOUR_KEY"`}
+          </code>
+        </div>
+      </div>
 
       {/* Create key modal */}
       <AnimatePresence>

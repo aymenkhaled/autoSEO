@@ -10,6 +10,7 @@ from pydantic import BaseModel, EmailStr
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from models.tables import TeamMember, User
+from packages.shared.readiness import READINESS_SAVED_ONLY, readiness_payload
 
 router = APIRouter(tags=["team"])
 
@@ -46,6 +47,11 @@ async def list_team_members(
             "email": m.email,
             "role": m.role,
             "status": m.status,
+            "delivery_state": readiness_payload(
+                READINESS_SAVED_ONLY,
+                label="Saved only",
+                description="This invite record is stored, but invite email delivery and acceptance flow are not wired yet.",
+            ) if m.status == "pending" else None,
             "full_name": user.full_name if user else None,
             "avatar_url": user.avatar_url if user else None,
             "invited_at": m.invited_at.isoformat() if m.invited_at else None,
@@ -100,13 +106,21 @@ async def invite_member(
     )
     db.add(member)
     await db.commit()
+    delivery_state = readiness_payload(
+        READINESS_SAVED_ONLY,
+        label="Saved only",
+        description="The invite record was created, but invite email delivery and acceptance flow are not wired yet.",
+    )
 
     return {
         "id": str(member.id),
         "email": member.email,
         "role": member.role,
         "status": "pending",
-        "message": f"Invitation sent to {member.email}",
+        "delivery_state": delivery_state["state"],
+        "delivery_state_label": delivery_state["label"],
+        "delivery_state_description": delivery_state["description"],
+        "message": f"Invitation saved for {member.email}",
     }
 
 

@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion'
-import { CreditCard, Zap, Check, ArrowUpRight, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Check, CreditCard, TrendingUp } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api-client'
+import { apiClient, systemApi } from '@/lib/api-client'
+import { readinessMeta } from '@/lib/readiness'
 
 function useUsage() {
   return useQuery({
@@ -64,16 +65,36 @@ function UsageBar({ used, limit, label }: { used: number; limit: number; label: 
 
 export default function BillingPage() {
   const { data: usage, isLoading } = useUsage()
+  const { data: readiness } = useQuery({
+    queryKey: ['system-readiness-billing'],
+    queryFn: () => systemApi.readiness(),
+  })
 
   const plan = usage?.plan ?? 'free'
   const limits = usage?.limits ?? {}
   const usageData = usage?.usage ?? {}
+  const billingReadiness = readiness?.features?.billing
+  const billingMeta = readinessMeta(billingReadiness?.state)
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground tracking-tight">Billing</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Manage your subscription and monitor usage</p>
+      </div>
+
+      <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 p-4">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 text-orange-300 mt-0.5" />
+          <div className="space-y-2">
+            <div className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${billingMeta.className}`}>
+              {billingReadiness?.label ?? billingMeta.label}
+            </div>
+            <p className="text-xs text-orange-100 leading-relaxed">
+              {billingReadiness?.description ?? 'Billing data is visible, but upgrade and portal actions stay disabled until Stripe checkout and portal are wired end to end.'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Current usage */}
@@ -151,16 +172,13 @@ export default function BillingPage() {
                   ))}
                 </ul>
                 <button
-                  onClick={() => {}}
                   disabled={isCurrent}
                   className={`w-full h-8 rounded-lg text-xs font-semibold transition-colors ${
                     isCurrent
                       ? 'bg-muted text-muted-foreground cursor-default'
-                      : p.popular
-                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                      : 'border border-border text-foreground hover:bg-muted'
+                      : 'border border-border text-muted-foreground bg-muted/40 cursor-not-allowed'
                   }`}>
-                  {isCurrent ? 'Current plan' : `Upgrade to ${p.name}`}
+                  {isCurrent ? 'Current plan' : 'Checkout not wired yet'}
                 </button>
               </motion.div>
             )
@@ -176,11 +194,11 @@ export default function BillingPage() {
           <h2 className="text-sm font-semibold text-foreground">Payment Method</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          Payment is handled securely via Stripe. No card required on the free plan.
+          Stripe-backed checkout and customer portal are intentionally deferred in this environment. Billing state is visible, but payment actions stay disabled until the integration is completed end to end.
         </p>
-        <button onClick={() => {}}
+        <button disabled
           className="inline-flex items-center gap-2 mt-3 h-8 px-3 rounded-lg border border-border text-xs font-medium text-foreground hover:bg-muted transition-colors">
-          Manage billing <ArrowUpRight className="h-3 w-3" />
+          Billing portal not wired yet
         </button>
       </motion.div>
     </div>

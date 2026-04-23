@@ -34,6 +34,11 @@ ISSUE_MISSING_CANONICAL: Final[str] = "missing_canonical"
 ISSUE_IMAGES_MISSING_ALT_TEXT: Final[str] = "images_missing_alt_text"
 ISSUE_SPA_NO_PRERENDER: Final[str] = "spa_no_prerender"
 ISSUE_STALE_SCHEMA_DATE: Final[str] = "stale_schema_date"
+ISSUE_UNVERIFIED_REVIEW_SCHEMA: Final[str] = "unverified_review_schema"
+ISSUE_MISSING_SITEMAP: Final[str] = "missing_sitemap"
+ISSUE_MISSING_ROBOTS: Final[str] = "missing_robots"
+ISSUE_MISSING_OFFER_SCHEMA: Final[str] = "missing_offer_schema"
+ISSUE_BROKEN_OG_IMAGE: Final[str] = "broken_og_image"
 
 LEGACY_ISSUE_ALIASES: Final[dict[str, str]] = {
     "missing_alt_text": ISSUE_IMAGES_MISSING_ALT_TEXT,
@@ -61,6 +66,8 @@ ISSUE_TO_FIX_FIELD: Final[dict[str, str]] = {
     ISSUE_MISSING_CANONICAL: FIX_FIELD_CANONICAL,
     ISSUE_MISSING_H1: FIX_FIELD_H1,
     ISSUE_MISSING_SCHEMA: FIX_FIELD_SCHEMA,
+    ISSUE_STALE_SCHEMA_DATE: FIX_FIELD_SCHEMA,
+    ISSUE_MISSING_OFFER_SCHEMA: FIX_FIELD_SCHEMA,
     ISSUE_IMAGES_MISSING_ALT_TEXT: FIX_FIELD_ALT_TEXT,
 }
 
@@ -100,6 +107,45 @@ AUTO_DEPLOY_CONNECTION_TYPES: Final[set[str]] = {
     "github",
 }
 
+CONNECTION_CAPABILITY_SUMMARY: Final[dict[str, dict[str, object]]] = {
+    "crawler": {
+        "label": "Crawler",
+        "mode": "read_only",
+        "description": "Audits public pages only. It can find issues and suggest manual fixes, but it cannot deploy changes.",
+        "required_credentials": [],
+    },
+    "snippet": {
+        "label": "JavaScript Snippet",
+        "mode": "read_only_runtime",
+        "description": "Collects runtime page data after installation. Direct deployment is intentionally disabled until snippet delivery is complete.",
+        "required_credentials": ["snippet install code"],
+    },
+    "wordpress": {
+        "label": "WordPress",
+        "mode": "auto_deploy",
+        "description": "Tests the WordPress REST API and can deploy supported title/meta description fixes when credentials and SEO plugin support allow it.",
+        "required_credentials": ["site_url", "username", "app_password"],
+    },
+    "shopify": {
+        "label": "Shopify",
+        "mode": "auto_deploy",
+        "description": "Tests the Shopify Admin API and can deploy supported product/page title and meta description fixes.",
+        "required_credentials": ["shop_domain", "access_token"],
+    },
+    "webflow": {
+        "label": "Webflow",
+        "mode": "auto_deploy",
+        "description": "Tests the Webflow Data API and can update supported SEO fields, then publish the page.",
+        "required_credentials": ["site_id", "token"],
+    },
+    "github": {
+        "label": "GitHub",
+        "mode": "pr_or_repo_update",
+        "description": "Uses repository access for file-based sites. Fixes should be reviewed through a PR-style workflow before going live.",
+        "required_credentials": ["owner", "repo", "github_token", "branch"],
+    },
+}
+
 
 def normalize_issue_type(issue_type: str | None) -> str:
     if not issue_type:
@@ -128,6 +174,22 @@ def supported_fix_fields(connection_type: str | None) -> set[str]:
     if not connection_type:
         return set()
     return set(CONNECTION_FIELD_CAPABILITIES.get(connection_type, set()))
+
+
+def connection_capabilities(connection_type: str | None) -> dict[str, object]:
+    key = str(connection_type or "crawler")
+    summary = CONNECTION_CAPABILITY_SUMMARY.get(key, CONNECTION_CAPABILITY_SUMMARY["crawler"])
+    supported = sorted(supported_fix_fields(key))
+    return {
+        **summary,
+        "connection_type": key,
+        "supported_fix_fields": supported,
+        "unsupported_message": (
+            "This connection is read-only for deployment."
+            if not supported
+            else "Only the listed fields can be auto-deployed; other issues remain manual."
+        ),
+    }
 
 
 def connection_can_auto_deploy(connection_type: str | None) -> bool:

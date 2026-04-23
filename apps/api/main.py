@@ -20,6 +20,7 @@ import sentry_sdk
 from config import get_settings
 from migrations import run_startup_migrations
 from models.database import engine
+from dependencies import get_db
 import models.tables
 
 settings = get_settings()
@@ -55,6 +56,14 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("AutoSEO API starting", environment=settings.ENVIRONMENT)
     await run_startup_migrations(engine, logger)
+    if not settings.ANTHROPIC_API_KEY:
+        from packages.shared.ai_cleanup import clear_placeholder_ai_fixes
+
+        async for db in get_db():
+            cleaned = await clear_placeholder_ai_fixes(db)
+            if cleaned:
+                logger.info("placeholder_ai_fixes_cleared", count=cleaned)
+            break
     yield
     logger.info("AutoSEO API shutting down")
     await engine.dispose()
@@ -123,6 +132,7 @@ from routers.api_keys import router as api_keys_router
 from routers.usage import router as usage_router
 from routers.change_log import router as change_log_router
 from routers.reports import router as reports_router
+from routers.system import router as system_router
 
 _ROUTERS = [
     (auth_router, "/auth"),
@@ -143,6 +153,7 @@ _ROUTERS = [
     (usage_router, "/usage"),
     (change_log_router, "/change-log"),
     (reports_router, "/reports"),
+    (system_router, "/system"),
 ]
 
 for base_prefix in ("", "/api", "/api/v1"):

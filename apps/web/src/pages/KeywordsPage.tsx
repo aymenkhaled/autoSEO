@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Target, TrendingUp, TrendingDown, Minus, Globe, Trash2, X, ChevronDown } from 'lucide-react'
+import { Plus, Target, TrendingUp, TrendingDown, Minus, Globe, Trash2, X, ChevronDown, Info } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import { useSites } from '@/hooks/use-data'
@@ -81,7 +81,7 @@ export default function KeywordsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Keywords</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Track keyword rankings and monitor position changes</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Save target keywords now; live ranking needs a ranking data source next.</p>
         </div>
         <div className="flex items-center gap-3">
           {sites.length > 0 && (
@@ -102,6 +102,13 @@ export default function KeywordsPage() {
             <Plus className="h-4 w-4" /> Add Keyword
           </button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
+        <Info className="h-4 w-4 text-amber-500 mt-0.5" />
+        <p className="text-xs text-amber-100 leading-relaxed">
+          Current status: <span className="font-semibold">Tracking only</span>. Keywords are stored and organized by site, intent, and priority. Ranking history stays empty until a SERP provider or manual ranking import is connected.
+        </p>
       </div>
 
       {/* Add keyword modal */}
@@ -222,7 +229,7 @@ export default function KeywordsPage() {
                     {rank?.position ? (
                       <span className="text-base font-bold text-foreground">#{rank.position}</span>
                     ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
+                      <span className="text-muted-foreground text-xs">Tracked only</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center hidden sm:table-cell">

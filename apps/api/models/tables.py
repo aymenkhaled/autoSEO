@@ -16,7 +16,7 @@ class Organization(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(Text, nullable=False)
     slug = Column(Text, unique=True, nullable=False)
-    plan = Column(Text, nullable=False, default="starter")
+    plan = Column(Text, nullable=False, default="free")
     stripe_customer_id = Column(Text)
     stripe_subscription_id = Column(Text)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)

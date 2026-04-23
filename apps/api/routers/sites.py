@@ -5,18 +5,117 @@ from datetime import datetime, timezone
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update, delete
+from sqlalchemy import select, func, update, delete, or_
 from uuid import UUID
 from typing import Optional
 
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.site import SiteCreate, SiteUpdate, SiteResponse, SiteListResponse
-from models.tables import Crawl, Issue, Page, Site
+from models.tables import (
+    AiUsage,
+    Backlink,
+    ChangeLog,
+    Competitor,
+    Crawl,
+    FixVersion,
+    Issue,
+    IssueComment,
+    Keyword,
+    KeywordRanking,
+    Page,
+    PageSource,
+    ScheduledReport,
+    Site,
+    SnippetEvent,
+)
 from packages.crawler.url_utils import is_safe_url
+from packages.shared.readiness import connection_status_payload, site_setup_payload
 from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, FIX_STATUS_ROLLED_BACK
 
 router = APIRouter(tags=["sites"])
+
+_ACTIVE_CRAWL_STATUSES = ("queued", "running", "cancelling")
+
+
+def _delete_count(result) -> int:
+    return int(result.rowcount or 0)
+
+
+async def _active_site_crawl(db: AsyncSession, site_id: UUID, org_id: UUID) -> Crawl | None:
+    return (
+        await db.execute(
+            select(Crawl)
+            .where(
+                Crawl.site_id == site_id,
+                Crawl.org_id == org_id,
+                Crawl.status.in_(_ACTIVE_CRAWL_STATUSES),
+            )
+            .order_by(Crawl.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def _delete_site_records(db: AsyncSession, site_id: UUID, org_id: UUID) -> dict[str, int]:
+    issue_ids = select(Issue.id).where(Issue.site_id == site_id, Issue.org_id == org_id)
+
+    counts = {
+        "issue_comments": _delete_count(
+            await db.execute(delete(IssueComment).where(IssueComment.issue_id.in_(issue_ids)))
+        ),
+        "fix_versions": _delete_count(
+            await db.execute(delete(FixVersion).where(FixVersion.site_id == site_id, FixVersion.org_id == org_id))
+        ),
+        "ai_usage": _delete_count(
+            await db.execute(
+                delete(AiUsage).where(
+                    AiUsage.org_id == org_id,
+                    or_(
+                        AiUsage.crawl_id.in_(select(Crawl.id).where(Crawl.site_id == site_id, Crawl.org_id == org_id)),
+                        AiUsage.issue_id.in_(issue_ids),
+                    ),
+                )
+            )
+        ),
+        "change_log": _delete_count(
+            await db.execute(delete(ChangeLog).where(ChangeLog.site_id == site_id, ChangeLog.org_id == org_id))
+        ),
+        "page_sources": _delete_count(
+            await db.execute(delete(PageSource).where(PageSource.site_id == site_id, PageSource.org_id == org_id))
+        ),
+        "snippet_events": _delete_count(
+            await db.execute(delete(SnippetEvent).where(SnippetEvent.site_id == site_id, SnippetEvent.org_id == org_id))
+        ),
+        "keyword_rankings": _delete_count(
+            await db.execute(delete(KeywordRanking).where(KeywordRanking.site_id == site_id, KeywordRanking.org_id == org_id))
+        ),
+        "keywords": _delete_count(
+            await db.execute(delete(Keyword).where(Keyword.site_id == site_id, Keyword.org_id == org_id))
+        ),
+        "competitors": _delete_count(
+            await db.execute(delete(Competitor).where(Competitor.site_id == site_id, Competitor.org_id == org_id))
+        ),
+        "backlinks": _delete_count(
+            await db.execute(delete(Backlink).where(Backlink.site_id == site_id, Backlink.org_id == org_id))
+        ),
+        "scheduled_reports": _delete_count(
+            await db.execute(delete(ScheduledReport).where(ScheduledReport.site_id == site_id, ScheduledReport.org_id == org_id))
+        ),
+        "issues": _delete_count(
+            await db.execute(delete(Issue).where(Issue.site_id == site_id, Issue.org_id == org_id))
+        ),
+        "pages": _delete_count(
+            await db.execute(delete(Page).where(Page.site_id == site_id, Page.org_id == org_id))
+        ),
+        "crawls": _delete_count(
+            await db.execute(delete(Crawl).where(Crawl.site_id == site_id, Crawl.org_id == org_id))
+        ),
+        "site": _delete_count(
+            await db.execute(delete(Site).where(Site.id == site_id, Site.org_id == org_id))
+        ),
+    }
+    return counts
 
 
 @router.get("", response_model=SiteListResponse)
@@ -170,6 +269,8 @@ async def get_site_summary(
             .group_by(Issue.severity)
         )
     ).all()
+    setup = site_setup_payload(site, latest_crawl)
+    connection = connection_status_payload(site)
 
     return {
         "site": SiteResponse.model_validate(site).model_dump(mode="json"),
@@ -195,6 +296,9 @@ async def get_site_summary(
             "medium": next((count for severity, count in severity_rows if severity == "medium"), 0),
             "low": next((count for severity, count in severity_rows if severity == "low"), 0),
         },
+        "setup": setup,
+        "connection": connection,
+        "audit_note": "Raw issue totals can move up or down when crawl coverage changes; use grouped root causes to judge whether the underlying SEO problems actually changed.",
     }
 
 
@@ -257,10 +361,26 @@ async def list_site_pages(
             )
         ).all()
     } if page_ids else {}
+    source_rows = (
+        await db.execute(
+            select(PageSource)
+            .where(PageSource.page_id.in_(page_ids))
+            .order_by(PageSource.last_synced_at.desc(), PageSource.created_at.desc())
+        )
+    ).scalars().all() if page_ids else []
+    source_map: dict[UUID, PageSource] = {}
+    for source in source_rows:
+        if source.page_id and source.page_id not in source_map:
+            source_map[source.page_id] = source
 
     return {
         "site_id": str(site_id),
         "crawl_id": str(target_crawl_id),
+        "crawl_context": {
+            "site_id": str(site_id),
+            "crawl_id": str(target_crawl_id),
+            "monitoring_mode": connection_status_payload(site)["monitoring_mode"],
+        },
         "pages": [
             {
                 "id": str(row.id),
@@ -271,6 +391,12 @@ async def list_site_pages(
                 "word_count": row.word_count,
                 "response_time_ms": row.response_time_ms,
                 "issue_count": int(issue_counts.get(row.id, 0)),
+                "source": {
+                    "connection_type": source_map[row.id].connection_type,
+                    "source_page_id": source_map[row.id].source_page_id,
+                    "source_path": source_map[row.id].source_path,
+                    "source_url": source_map[row.id].source_url,
+                } if row.id in source_map else None,
                 "created_at": row.created_at.isoformat() if row.created_at else None,
             }
             for row in rows
@@ -359,8 +485,7 @@ async def check_site_verification(
     if verified:
         site.ownership_verified = True
         site.verified_at = datetime.now(timezone.utc)
-        if site.status == "pending_verification":
-            site.status = "pending"
+        site.status = "active" if site.last_crawled_at else "pending"
         await db.commit()
 
     return {
@@ -396,7 +521,7 @@ async def update_site(
     return site
 
 
-@router.delete("/{site_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{site_id}")
 async def delete_site(
     site_id: UUID,
     auth: AuthContext = Depends(get_current_user),
@@ -409,6 +534,27 @@ async def delete_site(
     site = result.scalar_one_or_none()
     if not site:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    active_crawl = await _active_site_crawl(db, site_id, auth.org_id)
+    if active_crawl:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "This site still has an active crawl. Cancel it or wait for it to finish before deleting the site.",
+                "crawl_id": str(active_crawl.id),
+                "crawl_status": active_crawl.status,
+            },
+        )
 
-    await db.delete(site)
-    await db.commit()
+    try:
+        deleted_counts = await _delete_site_records(db, site_id, auth.org_id)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+
+    return {
+        "site_id": str(site_id),
+        "site_name": site.name,
+        "deleted_counts": deleted_counts,
+        "message": f"{site.name} was permanently deleted.",
+    }

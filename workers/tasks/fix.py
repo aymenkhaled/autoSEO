@@ -97,7 +97,7 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
     from sqlalchemy import select
     from config import get_settings
     from models.tables import Issue, Page, Site, AiUsage
-    from packages.ai_engine.engine import generate_fix
+    from packages.ai_engine.engine import AIProviderUnavailable, generate_fix, is_ai_configured
     from packages.shared.ai_safety import sanitize_html_for_ai, sanitize_field_value, validate_ai_output, UnsafeAIOutput
     from packages.shared.seo_domain import (
         FIX_STATUS_PENDING,
@@ -128,6 +128,20 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
         )).all()
 
         logger.info("ai_analysis_starting", crawl_id=crawl_id, candidates=len(rows))
+        if not is_ai_configured():
+            for issue, _page in rows:
+                issue.proposed_fix = None
+                issue.ai_confidence = None
+                issue.fix_type = "manual"
+                issue.proposed_fix_metadata = {
+                    **(issue.proposed_fix_metadata or {}),
+                    "ai_status": "provider_unavailable",
+                    "message": "Configure ANTHROPIC_API_KEY to enable AI-generated fixes.",
+                }
+            await db.commit()
+            logger.info("ai_analysis_skipped_provider_unavailable", crawl_id=crawl_id, candidates=len(rows))
+            return
+
         analyzed = 0
         for issue, page in rows:
             try:
@@ -155,6 +169,13 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
 
                 issue.proposed_fix = validated
                 issue.ai_confidence = fix.confidence
+                issue.proposed_fix_metadata = {
+                    **(issue.proposed_fix_metadata or {}),
+                    "ai_status": "generated",
+                    "model": fix.model_used,
+                    "reasoning": fix.reasoning,
+                    "tier": fix.tier,
+                }
                 # Tier 1 = auto-apply, 2 = one-click, 3 = manual
                 if fix.tier == 3:
                     issue.fix_type = "manual"
@@ -173,6 +194,15 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
                         task_type="fix_generation",
                     ))
                 analyzed += 1
+            except AIProviderUnavailable:
+                issue.proposed_fix = None
+                issue.ai_confidence = None
+                issue.fix_type = "manual"
+                issue.proposed_fix_metadata = {
+                    **(issue.proposed_fix_metadata or {}),
+                    "ai_status": "provider_unavailable",
+                    "message": "Configure ANTHROPIC_API_KEY to enable AI-generated fixes.",
+                }
             except Exception as exc:
                 logger.warning("ai_fix_gen_failed", issue_id=str(issue.id), error=str(exc))
 
@@ -190,6 +220,7 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
     from models.tables import ChangeLog, Issue, Page, PageSource, Site
     from packages.cms_adapters import get_adapter
     from packages.shared.ai_safety import validate_ai_output, UnsafeAIOutput
+    from packages.shared.notifications import notify_org_users
     from packages.shared.seo_domain import (
         FIX_STATUS_APPLY_FAILED,
         FIX_STATUS_DEPLOYED,
@@ -216,6 +247,22 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
             page = (await db.execute(select(Page).where(Page.id == issue.page_id))).scalar_one_or_none()
 
         field = issue_to_fix_field(issue.type)
+
+        async def _notify_apply_failed(message: str) -> None:
+            await notify_org_users(
+                db,
+                site.org_id,
+                notification_type="fix.apply_failed",
+                title=f"Fix failed for {site.name}",
+                body=message,
+                data={
+                    "site_id": str(site.id),
+                    "issue_id": str(issue.id),
+                    "connection_type": site.connection_type,
+                    "field": field,
+                },
+            )
+
         if not issue_can_auto_deploy(issue.type, site.connection_type):
             issue.fix_status = FIX_STATUS_APPLY_FAILED
             db.add(ChangeLog(
@@ -232,6 +279,7 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                     "field": field,
                 },
             ))
+            await _notify_apply_failed(f"{site.connection_type} cannot deploy {field} fixes automatically")
             await db.commit()
             return {"success": False, "message": f"{site.connection_type} cannot deploy {field} fixes automatically"}
 
@@ -260,6 +308,7 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                 new_value=issue.proposed_fix,
                 extra_metadata={"reason": "adapter_setup_failed", "message": str(exc)},
             ))
+            await _notify_apply_failed(f"Adapter setup failed: {exc}")
             await db.commit()
             return {"success": False, "message": f"Adapter setup failed: {exc}"}
 
@@ -286,6 +335,7 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                     "field": field,
                 },
             ))
+            await _notify_apply_failed("Unable to map crawled page to CMS resource")
             await db.commit()
             return {"success": False, "message": "Unable to map crawled page to CMS resource"}
 
@@ -304,6 +354,7 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                 new_value=new_value,
                 extra_metadata={"reason": "adapter_error", "message": str(exc)},
             ))
+            await _notify_apply_failed(f"Adapter error: {exc}")
             await db.commit()
             return {"success": False, "message": f"Adapter error: {exc}"}
 
@@ -326,6 +377,19 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                     "source_page_id": cms_page_id,
                 },
             ))
+            await notify_org_users(
+                db,
+                site.org_id,
+                notification_type="fix.deployed",
+                title=f"Fix deployed for {site.name}",
+                body=f"{field} was deployed through {site.connection_type}.",
+                data={
+                    "site_id": str(site.id),
+                    "issue_id": str(issue.id),
+                    "connection_type": site.connection_type,
+                    "field": field,
+                },
+            )
         else:
             issue.fix_status = FIX_STATUS_APPLY_FAILED
             db.add(ChangeLog(
@@ -343,6 +407,7 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                     "message": result.message,
                 },
             ))
+            await _notify_apply_failed(result.message)
 
         await db.commit()
         return {"success": result.success, "message": result.message}

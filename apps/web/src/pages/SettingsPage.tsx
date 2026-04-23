@@ -4,7 +4,8 @@ import { Bell, Building2, CreditCard, Key, Shield, User } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { authApi, notificationsApi } from '@/lib/api-client'
+import { authApi, notificationsApi, systemApi } from '@/lib/api-client'
+import { readinessMeta } from '@/lib/readiness'
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
@@ -33,6 +34,10 @@ export default function SettingsPage() {
     queryKey: ['notification-preferences'],
     queryFn: () => notificationsApi.preferences(),
   })
+  const readinessQuery = useQuery({
+    queryKey: ['system-readiness-settings'],
+    queryFn: () => systemApi.readiness(),
+  })
 
   const updatePreferences = useMutation({
     mutationFn: (data: any) => notificationsApi.updatePreferences(data),
@@ -46,6 +51,9 @@ export default function SettingsPage() {
   const me = meQuery.data
   const org = orgQuery.data
   const prefs = notificationPrefsQuery.data
+  const readiness = readinessQuery.data
+  const billingReadiness = readiness?.features?.billing
+  const aiReadiness = readiness?.features?.ai_fixes
 
   const togglePref = (field: string) => {
     if (!prefs) return
@@ -111,7 +119,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Plan</p>
-                    <p className="text-sm text-foreground capitalize">{org?.plan || 'starter'}</p>
+                    <p className="text-sm text-foreground capitalize">{org?.plan || 'free'}</p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground">Slug</p>
@@ -129,7 +137,12 @@ export default function SettingsPage() {
                 </p>
                 <div className="rounded-lg border border-border bg-muted/40 p-4">
                   <p className="text-sm font-medium text-foreground">Current plan</p>
-                  <p className="text-xs text-muted-foreground mt-1 capitalize">{org?.plan || 'starter'}</p>
+                  <p className="text-xs text-muted-foreground mt-1 capitalize">{org?.plan || 'free'}</p>
+                  {billingReadiness && (
+                    <span className={`inline-flex items-center mt-3 px-2 py-0.5 rounded-full border text-[10px] font-semibold ${readinessMeta(billingReadiness.state).className}`}>
+                      {billingReadiness.label}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -165,13 +178,15 @@ export default function SettingsPage() {
                 <div className="rounded-lg border border-border bg-muted/30 p-4">
                   <p className="text-sm font-medium text-foreground">Authentication</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Supabase remains the source of truth for active sessions and sign-in state.
+                    {readiness?.auth_mode === 'supabase'
+                      ? 'Supabase browser auth is the active session source in this environment.'
+                      : 'Local FastAPI JWT auth is the active browser session source in this environment.'}
                   </p>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/30 p-4">
-                  <p className="text-sm font-medium text-foreground">Password hash support</p>
+                  <p className="text-sm font-medium text-foreground">AI readiness</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Local compatibility auth is enabled for environments that still use email/password routes.
+                    {aiReadiness?.description ?? 'AI readiness is loading.'}
                   </p>
                 </div>
               </div>

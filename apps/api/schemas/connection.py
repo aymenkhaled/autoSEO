@@ -10,6 +10,7 @@ ConnectionType = Literal["crawler", "snippet", "wordpress", "shopify", "webflow"
 class ConnectionCredentials(BaseModel):
     """Per-type credentials. Only the fields for the chosen type are required."""
     connection_type: ConnectionType
+    sandbox: bool = False
 
     # WordPress
     site_url: Optional[str] = None
@@ -39,6 +40,16 @@ class ConnectionTestResponse(BaseModel):
 class ConnectionStatusResponse(BaseModel):
     connection_type: ConnectionType
     configured: bool
+    monitoring_mode: Literal["crawler", "snippet"] = "crawler"
+    monitoring_mode_label: str = "Crawler"
+    write_integration: Optional[ConnectionType] = None
+    write_integration_label: str = "Not configured"
+    write_integration_configured: bool = False
+    auto_deploy_capable: bool = False
+    supported_fix_fields: list[str] = Field(default_factory=list)
+    readiness: str = "monitoring_only"
+    readiness_label: str = "Monitoring only"
+    explanation: str = ""
     last_tested_at: Optional[str] = None
     snippet_token: Optional[str] = None
     snippet_url: Optional[str] = None

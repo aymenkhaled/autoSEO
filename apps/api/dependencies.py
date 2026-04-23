@@ -8,9 +8,11 @@ from typing import Optional
 import redis.asyncio as aioredis
 import httpx
 import time
+import hashlib
+from datetime import datetime, timezone
 
 from models.database import AsyncSessionLocal
-from models.tables import User, Organization
+from models.tables import ApiKey, User, Organization
 from schemas.auth import AuthContext
 from config import get_settings
 
@@ -45,6 +47,103 @@ async def get_redis() -> Optional[aioredis.Redis]:
 
 
 # --- JWT Auth ---
+def _normalize_api_path(path: str) -> str:
+    for prefix in ("/api/v1", "/api"):
+        if path == prefix:
+            return "/"
+        if path.startswith(f"{prefix}/"):
+            return path[len(prefix):]
+    return path
+
+
+def _required_scope_for_request(method: str, path: str) -> str | None:
+    path = _normalize_api_path(path)
+    method = method.upper()
+
+    if path.startswith("/health"):
+        return None
+    if path.startswith(("/api-keys", "/auth", "/team", "/notifications", "/usage")):
+        return "__jwt_only__"
+
+    if path == "/reports/generate" and method == "POST":
+        return "read:analytics"
+
+    if path.startswith(("/analytics", "/org")):
+        return "read:analytics"
+
+    if path.startswith("/reports"):
+        return "read:analytics" if method == "GET" else "write:sites"
+
+    if path.startswith(("/sites", "/crawls", "/snippet", "/keywords", "/competitors", "/webhooks")):
+        return "read:sites" if method == "GET" else "write:sites"
+
+    if path.startswith("/issues") or path.startswith("/change-log"):
+        return "read:issues"
+
+    if path.startswith("/fixes"):
+        return "write:fixes" if method in {"POST", "PUT", "PATCH", "DELETE"} else "read:issues"
+
+    return "__jwt_only__"
+
+
+def _datetime_expired(value) -> bool:
+    if not value:
+        return False
+    now = datetime.now(timezone.utc)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value < now
+
+
+async def _validate_api_key(
+    raw_key: str,
+    request: Request,
+    db: AsyncSession,
+) -> AuthContext:
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    api_key = (
+        await db.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+    ).scalar_one_or_none()
+    if not api_key or _datetime_expired(api_key.expires_at):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+
+    required_scope = _required_scope_for_request(request.method, request.url.path)
+    scopes = list(api_key.scopes or [])
+    if required_scope == "__jwt_only__":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint requires a user session, not an API key",
+        )
+    if required_scope and required_scope not in scopes:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"API key missing required scope: {required_scope}",
+        )
+
+    owner = (
+        await db.execute(
+            select(User)
+            .where(User.org_id == api_key.org_id)
+            .order_by((User.role == "owner").desc(), User.created_at.asc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if not owner:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key organization has no user")
+
+    api_key.last_used_at = datetime.now(timezone.utc)
+    await db.commit()
+    return AuthContext(
+        user_id=owner.id,
+        org_id=api_key.org_id,
+        role="api_key",
+        email=f"api-key:{api_key.name}",
+        auth_method="api_key",
+        api_key_id=api_key.id,
+        scopes=scopes,
+    )
+
+
 async def _validate_supabase_token(token: str) -> dict:
     import os
 
@@ -87,7 +186,9 @@ async def _validate_supabase_token(token: str) -> dict:
 
 
 async def get_current_user(
+    request: Request,
     authorization: str = Header(None),
+    x_autoseo_key: str = Header(None, alias="X-AutoSEO-Key"),
     db: AsyncSession = Depends(get_db),
 ) -> AuthContext:
     """Extract and validate JWT from Authorization header.
@@ -95,6 +196,9 @@ async def get_current_user(
     Supports both Supabase-issued JWTs and locally-issued JWTs.
     Looks up org_id from the database when not present in the token.
     """
+    if x_autoseo_key:
+        return await _validate_api_key(x_autoseo_key.strip(), request, db)
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -108,6 +212,8 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization scheme",
         )
+    if token.startswith("autoseo_"):
+        return await _validate_api_key(token, request, db)
 
     try:
         payload = jwt.decode(
@@ -159,7 +265,7 @@ async def get_current_user(
             base_slug = _slugify(email.split("@")[0] if email else "user")
             slug = f"{base_slug}-{str(uuid.uuid4())[:8]}"
 
-            org = Organization(name=f"{full_name or email.split('@')[0] or 'My'}'s Organization", slug=slug, plan="starter")
+            org = Organization(name=f"{full_name or email.split('@')[0] or 'My'}'s Organization", slug=slug, plan="free")
             db.add(org)
             await db.flush()
 
@@ -188,19 +294,22 @@ async def get_current_user(
         org_id=org_id,
         role=role,
         email=email,
+        auth_method="jwt",
     )
 
 
 # --- Optional Auth ---
 async def get_optional_user(
+    request: Request,
     authorization: str = Header(None),
+    x_autoseo_key: str = Header(None, alias="X-AutoSEO-Key"),
     db: AsyncSession = Depends(get_db),
 ) -> Optional[AuthContext]:
     """Like get_current_user but returns None if no auth header."""
-    if not authorization:
+    if not authorization and not x_autoseo_key:
         return None
     try:
-        return await get_current_user(authorization, db)
+        return await get_current_user(request, authorization, x_autoseo_key, db)
     except HTTPException:
         return None
 

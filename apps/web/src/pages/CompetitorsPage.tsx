@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Swords, Globe, Trash2, X, ChevronDown, ExternalLink, BarChart2 } from 'lucide-react'
+import { Plus, Swords, Globe, Trash2, X, ChevronDown, ExternalLink, BarChart2, Info, Play } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import { useSites } from '@/hooks/use-data'
@@ -39,6 +39,19 @@ function useRemoveCompetitor() {
   })
 }
 
+function useAnalyzeCompetitor() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string; site_id: string }) =>
+      apiClient.post(`competitors/${id}/analyze`).json<any>(),
+    onSuccess: (result, vars) => {
+      qc.invalidateQueries({ queryKey: ['competitors', vars.site_id] })
+      toast.success(result.message || 'Competitor analyzed')
+    },
+    onError: () => toast.error('Failed to analyze competitor'),
+  })
+}
+
 function ScoreBar({ score }: { score?: number }) {
   if (!score) return <span className="text-muted-foreground text-xs">Not analyzed</span>
   const color = score >= 70 ? 'bg-green-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500'
@@ -61,6 +74,7 @@ export default function CompetitorsPage() {
   const { data, isLoading } = useCompetitors(siteId)
   const add = useAddCompetitor()
   const remove = useRemoveCompetitor()
+  const analyze = useAnalyzeCompetitor()
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ domain: '', name: '' })
 
@@ -79,7 +93,7 @@ export default function CompetitorsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Competitors</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Monitor competitor SEO performance and benchmark your sites</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Track competitors and run lightweight homepage comparisons with the crawler.</p>
         </div>
         <div className="flex items-center gap-3">
           {sites.length > 0 && (
@@ -99,6 +113,13 @@ export default function CompetitorsPage() {
             <Plus className="h-4 w-4" /> Add Competitor
           </button>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
+        <Info className="h-4 w-4 text-amber-500 mt-0.5" />
+        <p className="text-xs text-amber-100 leading-relaxed">
+          Current status: <span className="font-semibold">Working for lightweight crawl comparison</span>, but keyword counts and backlinks still <span className="font-semibold">need a provider</span>.
+        </p>
       </div>
 
       <AnimatePresence>
@@ -180,10 +201,16 @@ export default function CompetitorsPage() {
                     {c.domain} <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
-                <button onClick={() => remove.mutate({ id: c.id, site_id: siteId })}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => analyze.mutate({ id: c.id, site_id: siteId })} disabled={analyze.isPending}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50">
+                    <Play className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => remove.mutate({ id: c.id, site_id: siteId })}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
               <div className="space-y-3">
                 <div>
