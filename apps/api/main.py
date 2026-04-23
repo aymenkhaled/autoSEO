@@ -18,7 +18,8 @@ import structlog
 import sentry_sdk
 
 from config import get_settings
-from models.database import engine, Base
+from migrations import run_startup_migrations
+from models.database import engine
 import models.tables
 
 settings = get_settings()
@@ -53,22 +54,7 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("AutoSEO API starting", environment=settings.ENVIRONMENT)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Phase 2 lightweight migrations — additive columns only
-        from sqlalchemy import text
-        for stmt in [
-            "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS inp_ms INTEGER",
-            "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS fcp_ms INTEGER",
-            "ALTER TABLE snippet_events ADD COLUMN IF NOT EXISTS device_type TEXT",
-            # Gap 5: conditional GET cache headers for pages
-            "ALTER TABLE pages ADD COLUMN IF NOT EXISTS etag TEXT",
-            "ALTER TABLE pages ADD COLUMN IF NOT EXISTS last_modified TEXT",
-        ]:
-            try:
-                await conn.execute(text(stmt))
-            except Exception as e:
-                logger.warning("migration_skipped", stmt=stmt, error=str(e))
+    await run_startup_migrations(engine, logger)
     yield
     logger.info("AutoSEO API shutting down")
     await engine.dispose()
@@ -128,6 +114,7 @@ from routers.connections import router as connections_router
 from routers.snippet import router as snippet_router
 from routers.webhooks import router as webhooks_router
 from routers.analytics import router as analytics_router
+from routers.dashboard import router as dashboard_router
 from routers.keywords import router as keywords_router
 from routers.competitors import router as competitors_router
 from routers.notifications import router as notifications_router
@@ -135,40 +122,32 @@ from routers.team import router as team_router
 from routers.api_keys import router as api_keys_router
 from routers.usage import router as usage_router
 from routers.change_log import router as change_log_router
+from routers.reports import router as reports_router
 
-app.include_router(auth_router, prefix="/auth")
-app.include_router(sites_router, prefix="/sites")
-app.include_router(connections_router, prefix="/sites")
-app.include_router(crawls_router, prefix="/crawls")
-app.include_router(issues_router, prefix="/issues")
-app.include_router(fixes_router, prefix="/fixes")
-app.include_router(snippet_router, prefix="/snippet")
-app.include_router(webhooks_router, prefix="/webhooks")
-app.include_router(analytics_router, prefix="/analytics")
-app.include_router(keywords_router, prefix="/keywords")
-app.include_router(competitors_router, prefix="/competitors")
-app.include_router(notifications_router, prefix="/notifications")
-app.include_router(team_router, prefix="/team")
-app.include_router(api_keys_router, prefix="/api-keys")
-app.include_router(usage_router, prefix="/usage")
-app.include_router(change_log_router, prefix="/change-log")
+_ROUTERS = [
+    (auth_router, "/auth"),
+    (sites_router, "/sites"),
+    (connections_router, "/sites"),
+    (crawls_router, "/crawls"),
+    (issues_router, "/issues"),
+    (fixes_router, "/fixes"),
+    (snippet_router, "/snippet"),
+    (webhooks_router, "/webhooks"),
+    (analytics_router, "/analytics"),
+    (dashboard_router, "/org"),
+    (keywords_router, "/keywords"),
+    (competitors_router, "/competitors"),
+    (notifications_router, "/notifications"),
+    (team_router, "/team"),
+    (api_keys_router, "/api-keys"),
+    (usage_router, "/usage"),
+    (change_log_router, "/change-log"),
+    (reports_router, "/reports"),
+]
 
-app.include_router(auth_router, prefix="/api/auth")
-app.include_router(sites_router, prefix="/api/sites")
-app.include_router(connections_router, prefix="/api/sites")
-app.include_router(crawls_router, prefix="/api/crawls")
-app.include_router(issues_router, prefix="/api/issues")
-app.include_router(fixes_router, prefix="/api/fixes")
-app.include_router(snippet_router, prefix="/api/snippet")
-app.include_router(webhooks_router, prefix="/api/webhooks")
-app.include_router(analytics_router, prefix="/api/analytics")
-app.include_router(keywords_router, prefix="/api/keywords")
-app.include_router(competitors_router, prefix="/api/competitors")
-app.include_router(notifications_router, prefix="/api/notifications")
-app.include_router(team_router, prefix="/api/team")
-app.include_router(api_keys_router, prefix="/api/api-keys")
-app.include_router(usage_router, prefix="/api/usage")
-app.include_router(change_log_router, prefix="/api/change-log")
+for base_prefix in ("", "/api", "/api/v1"):
+    for router, route_prefix in _ROUTERS:
+        app.include_router(router, prefix=f"{base_prefix}{route_prefix}")
 
 
 # --- Health Check ---

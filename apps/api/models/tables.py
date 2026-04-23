@@ -65,6 +65,11 @@ class Site(Base):
     respect_robots_txt = Column(Boolean, default=True)
     crawl_delay_ms = Column(Integer, default=1000)
     status = Column(Text, default="pending")
+    ownership_verified = Column(Boolean, nullable=False, default=False)
+    verification_method = Column(Text)
+    verification_token = Column(Text)
+    verification_requested_at = Column(DateTime(timezone=True))
+    verified_at = Column(DateTime(timezone=True))
     last_crawled_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
@@ -159,11 +164,39 @@ class Page(Base):
     # Relationships
     crawl = relationship("Crawl", back_populates="pages")
     issues = relationship("Issue", back_populates="page")
+    page_sources = relationship("PageSource", back_populates="page")
 
     __table_args__ = (
         Index("idx_pages_crawl_id", "crawl_id"),
         Index("idx_pages_site_id", "site_id"),
         Index("idx_pages_org_id", "org_id"),
+    )
+
+
+class PageSource(Base):
+    """Maps a crawled public URL to the real CMS resource identifier."""
+
+    __tablename__ = "page_sources"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    page_id = Column(UUID(as_uuid=True), ForeignKey("pages.id"))
+    public_url = Column(Text, nullable=False)
+    source_page_id = Column(Text, nullable=False)
+    source_path = Column(Text)
+    source_url = Column(Text)
+    connection_type = Column(Text, nullable=False)
+    source_metadata = Column("metadata", JSONB)
+    last_synced_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    page = relationship("Page", back_populates="page_sources")
+
+    __table_args__ = (
+        Index("idx_page_sources_site_id", "site_id"),
+        Index("idx_page_sources_page_id", "page_id"),
+        Index("idx_page_sources_site_public_url", "site_id", "public_url", unique=True),
     )
 
 

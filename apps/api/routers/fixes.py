@@ -14,6 +14,13 @@ from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import FixApplyRequest, FixRollbackRequest, FixResponse
 from models.tables import Issue, ChangeLog, FixVersion, Site
+from packages.shared.seo_domain import (
+    FIX_STATUS_APPROVED,
+    FIX_STATUS_DEPLOYED,
+    FIX_STATUS_ROLLED_BACK,
+    issue_can_auto_deploy,
+    normalize_fix_status,
+)
 
 router = APIRouter(tags=["fixes"])
 
@@ -41,10 +48,11 @@ async def apply_fix(
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
 
-    if issue.fix_status == "applied":
+    current_status = normalize_fix_status(issue.fix_status)
+    if current_status in (FIX_STATUS_APPROVED, FIX_STATUS_DEPLOYED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Fix already applied",
+            detail="Fix has already been approved",
         )
 
     if not issue.proposed_fix:
@@ -70,27 +78,32 @@ async def apply_fix(
     if not issue.rollback_value:
         issue.rollback_value = issue.current_value
 
-    issue.fix_status = "applied"
-    issue.applied_at = datetime.now(timezone.utc)
+    issue.fix_status = FIX_STATUS_APPROVED
     issue.applied_by = auth.user_id
+
+    site = (await db.execute(select(Site).where(Site.id == issue.site_id))).scalar_one_or_none()
+    can_auto_deploy = bool(site and issue_can_auto_deploy(issue.type, site.connection_type))
 
     log_entry = ChangeLog(
         org_id=auth.org_id,
         site_id=issue.site_id,
         issue_id=issue.id,
-        action="fix_applied",
+        action="fix_approved",
         actor_type="user",
         actor_id=auth.user_id,
         old_value=issue.current_value,
         new_value=issue.proposed_fix,
+        extra_metadata={
+            "connection_type": site.connection_type if site else None,
+            "auto_deploy": can_auto_deploy,
+        },
     )
     db.add(log_entry)
     await db.commit()
 
     # Push to the live CMS via the appropriate adapter (background, fire-and-forget).
     # In dev (no Redis) we run inline; in prod the Celery worker picks it up.
-    site = (await db.execute(select(Site).where(Site.id == issue.site_id))).scalar_one_or_none()
-    if site and site.connection_type not in ("crawler",):
+    if can_auto_deploy and site:
         from workers.tasks.fix import apply_ai_fix
         if os.environ.get("REDIS_URL"):
             try:
@@ -102,8 +115,8 @@ async def apply_fix(
 
     return FixResponse(
         issue_id=issue.id,
-        status="applied",
-        message="Fix applied successfully",
+        status=FIX_STATUS_APPROVED,
+        message="Fix approved and deployment queued" if can_auto_deploy else "Fix approved; manual follow-up is still required",
         old_value=issue.current_value,
         new_value=issue.proposed_fix,
     )
@@ -133,10 +146,10 @@ async def rollback_fix(
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
 
-    if issue.fix_status != "applied":
+    if normalize_fix_status(issue.fix_status) != FIX_STATUS_DEPLOYED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Fix has not been applied yet",
+            detail="Only deployed fixes can be rolled back",
         )
 
     # Prefer the most recent FixVersion's captured_value over the legacy field
@@ -165,7 +178,7 @@ async def rollback_fix(
     )
     db.add(snapshot)
 
-    issue.fix_status = "rolled_back"
+    issue.fix_status = FIX_STATUS_ROLLED_BACK
     issue.rolled_back_at = datetime.now(timezone.utc)
 
     log_entry = ChangeLog(
@@ -177,6 +190,7 @@ async def rollback_fix(
         actor_id=auth.user_id,
         old_value=issue.proposed_fix,
         new_value=rollback_to,
+        extra_metadata={"rolled_back_from": FIX_STATUS_DEPLOYED},
     )
     db.add(log_entry)
     await db.commit()

@@ -44,7 +44,7 @@ function useIssues(params: { site_id?: string; severity?: string; category?: str
 
   return useQuery({
     queryKey: ['issues', params],
-    queryFn: () => apiClient.get('/issues', { searchParams }).json<any>(),
+    queryFn: () => apiClient.get('issues', { searchParams }).json<any>(),
     placeholderData: (prev: any) => prev,
   })
 }

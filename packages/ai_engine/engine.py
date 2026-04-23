@@ -14,6 +14,15 @@ import logging
 from typing import Optional
 from dataclasses import dataclass, asdict
 
+from packages.shared.seo_domain import (
+    ISSUE_IMAGES_MISSING_ALT_TEXT,
+    ISSUE_MISSING_CANONICAL,
+    ISSUE_MISSING_META_DESCRIPTION,
+    ISSUE_TITLE_TOO_LONG,
+    ISSUE_TITLE_TOO_SHORT,
+    normalize_issue_type,
+)
+
 log = logging.getLogger(__name__)
 
 # ─── Data Structures ─────────────────────────────────────────────────────────
@@ -245,7 +254,7 @@ Output ONLY valid JSON:
 
 
 def _select_prompt(issue_type: str) -> str:
-    return ISSUE_PROMPTS.get(issue_type, _GENERIC_PROMPT)
+    return ISSUE_PROMPTS.get(normalize_issue_type(issue_type), _GENERIC_PROMPT)
 
 
 # Backwards-compat alias for any older callers
@@ -254,7 +263,12 @@ FIX_PROMPT = _GENERIC_PROMPT
 
 def _determine_tier(issue_type: str, confidence: float) -> int:
     """Classify fix tier based on issue type and confidence score."""
-    AUTO_TYPES = {"missing_alt_text", "missing_meta_description", "broken_canonical"}
+    issue_type = normalize_issue_type(issue_type)
+    AUTO_TYPES = {
+        ISSUE_IMAGES_MISSING_ALT_TEXT,
+        ISSUE_MISSING_META_DESCRIPTION,
+        ISSUE_MISSING_CANONICAL,
+    }
     MANUAL_TYPES = {"content_rewrite", "structural_change", "duplicate_content"}
 
     if issue_type in MANUAL_TYPES:
@@ -266,7 +280,8 @@ def _determine_tier(issue_type: str, confidence: float) -> int:
 
 def _use_haiku(issue_type: str) -> bool:
     """Use cheaper Haiku model for simple, templated fixes."""
-    SIMPLE = {"missing_alt_text", "title_too_short", "title_too_long"}
+    issue_type = normalize_issue_type(issue_type)
+    SIMPLE = {ISSUE_IMAGES_MISSING_ALT_TEXT, ISSUE_TITLE_TOO_SHORT, ISSUE_TITLE_TOO_LONG}
     return issue_type in SIMPLE
 
 
@@ -290,6 +305,7 @@ async def generate_fix(
         log.warning("ANTHROPIC_API_KEY not set — returning stub fix for issue_type=%s", issue_type)
         return _stub_fix(issue_type, current_value)
 
+    issue_type = normalize_issue_type(issue_type)
     model = "claude-haiku-3-5" if _use_haiku(issue_type) else "claude-sonnet-4-5"
 
     template = _select_prompt(issue_type)
@@ -359,10 +375,11 @@ async def generate_fix(
 
 def _stub_fix(issue_type: str, current_value: str, error: str = "") -> FixResult:
     """Return a clearly-labelled placeholder fix when API key is absent."""
+    issue_type = normalize_issue_type(issue_type)
     stubs: dict[str, str] = {
-        "missing_meta_description": "Discover how AutoSEO automatically finds and fixes SEO issues on your website. Start your free trial today.",
-        "missing_alt_text": "A descriptive image alt text would go here (AI key required for generation)",
-        "title_too_long": (current_value or "Page title")[:57] if current_value else "Page Title — AutoSEO",
+        ISSUE_MISSING_META_DESCRIPTION: "Discover how AutoSEO automatically finds and fixes SEO issues on your website. Start your free trial today.",
+        ISSUE_IMAGES_MISSING_ALT_TEXT: "A descriptive image alt text would go here (AI key required for generation)",
+        ISSUE_TITLE_TOO_LONG: (current_value or "Page title")[:57] if current_value else "Page Title — AutoSEO",
         "missing_h1": "Main Page Heading",
         "duplicate_title": f"Unique: {current_value[:45]}" if current_value else "Unique Page Title",
     }

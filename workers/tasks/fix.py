@@ -99,6 +99,12 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
     from models.tables import Issue, Page, Site, AiUsage
     from packages.ai_engine.engine import generate_fix
     from packages.shared.ai_safety import sanitize_html_for_ai, sanitize_field_value, validate_ai_output, UnsafeAIOutput
+    from packages.shared.seo_domain import (
+        FIX_STATUS_PENDING,
+        FIX_STATUS_REJECTED_UNSAFE,
+        issue_to_fix_field,
+        normalize_issue_type,
+    )
 
     settings = get_settings()
     engine = create_async_engine(settings.DATABASE_URL)
@@ -116,7 +122,7 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
             .join(Page, Page.id == Issue.page_id, isouter=True)
             .where(
                 Issue.crawl_id == crawl_id,
-                Issue.fix_status == "pending",
+                Issue.fix_status == FIX_STATUS_PENDING,
                 Issue.fix_type == "auto",
             )
         )).all()
@@ -130,7 +136,7 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
                     max_len=1500,
                 ) if page else ""
                 fix = await generate_fix(
-                    issue_type=issue.type,
+                    issue_type=normalize_issue_type(issue.type),
                     current_value=sanitize_field_value(issue.current_value or "", 500),
                     page_url=(page.url if page else "") or site.domain,
                     page_title=sanitize_field_value(page.title if page else "", 200),
@@ -139,12 +145,12 @@ async def _run_ai_analysis_async(crawl_id: str, site_id: str):
                 )
 
                 # Validate AI output before persisting
-                field = _issue_to_field(issue.type)
+                field = issue_to_fix_field(issue.type)
                 try:
                     validated = validate_ai_output(fix.fix, field=field)
                 except UnsafeAIOutput as exc:
                     logger.warning("ai_output_rejected", issue_id=str(issue.id), reason=str(exc))
-                    issue.fix_status = "rejected_unsafe"
+                    issue.fix_status = FIX_STATUS_REJECTED_UNSAFE
                     continue
 
                 issue.proposed_fix = validated
@@ -181,10 +187,16 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
     from sqlalchemy import select
     from datetime import datetime, timezone
     from config import get_settings
-    from models.tables import Issue, Site, ChangeLog, Page
+    from models.tables import ChangeLog, Issue, Page, PageSource, Site
     from packages.cms_adapters import get_adapter
-    from packages.shared.encryption import decrypt_credential
     from packages.shared.ai_safety import validate_ai_output, UnsafeAIOutput
+    from packages.shared.seo_domain import (
+        FIX_STATUS_APPLY_FAILED,
+        FIX_STATUS_DEPLOYED,
+        FIX_STATUS_REJECTED_UNSAFE,
+        issue_can_auto_deploy,
+        issue_to_fix_field,
+    )
 
     settings = get_settings()
     engine = create_async_engine(settings.DATABASE_URL)
@@ -203,12 +215,31 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
         if issue.page_id:
             page = (await db.execute(select(Page).where(Page.id == issue.page_id))).scalar_one_or_none()
 
+        field = issue_to_fix_field(issue.type)
+        if not issue_can_auto_deploy(issue.type, site.connection_type):
+            issue.fix_status = FIX_STATUS_APPLY_FAILED
+            db.add(ChangeLog(
+                org_id=site.org_id,
+                site_id=site.id,
+                issue_id=issue.id,
+                action="fix_deploy_failed",
+                actor_type="system",
+                old_value=issue.current_value,
+                new_value=issue.proposed_fix,
+                extra_metadata={
+                    "reason": "unsupported_field_or_connection",
+                    "connection_type": site.connection_type,
+                    "field": field,
+                },
+            ))
+            await db.commit()
+            return {"success": False, "message": f"{site.connection_type} cannot deploy {field} fixes automatically"}
+
         # Re-validate before pushing live
-        field = _issue_to_field(issue.type)
         try:
             new_value = validate_ai_output(issue.proposed_fix, field=field)
         except UnsafeAIOutput as exc:
-            issue.fix_status = "rejected_unsafe"
+            issue.fix_status = FIX_STATUS_REJECTED_UNSAFE
             await db.commit()
             return {"success": False, "message": f"Refused unsafe AI output: {exc}"}
 
@@ -217,17 +248,67 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
             creds = _decrypt_site_creds(str(site.org_id), site)
             adapter = get_adapter(site.connection_type, **_adapter_kwargs(site, creds))
         except Exception as exc:
+            from packages.shared.seo_domain import FIX_STATUS_APPLY_FAILED
+            issue.fix_status = FIX_STATUS_APPLY_FAILED
+            db.add(ChangeLog(
+                org_id=site.org_id,
+                site_id=site.id,
+                issue_id=issue.id,
+                action="fix_deploy_failed",
+                actor_type="system",
+                old_value=issue.current_value,
+                new_value=issue.proposed_fix,
+                extra_metadata={"reason": "adapter_setup_failed", "message": str(exc)},
+            ))
+            await db.commit()
             return {"success": False, "message": f"Adapter setup failed: {exc}"}
 
-        cms_page_id = (page.url if page else "") or ""
+        cms_page_id = await _resolve_cms_page_id(
+            db=db,
+            site=site,
+            page=page,
+            adapter=adapter,
+            page_source_model=PageSource,
+        )
+        if not cms_page_id:
+            issue.fix_status = FIX_STATUS_APPLY_FAILED
+            db.add(ChangeLog(
+                org_id=site.org_id,
+                site_id=site.id,
+                issue_id=issue.id,
+                action="fix_deploy_failed",
+                actor_type="system",
+                old_value=issue.current_value,
+                new_value=new_value,
+                extra_metadata={
+                    "reason": "page_source_not_found",
+                    "connection_type": site.connection_type,
+                    "field": field,
+                },
+            ))
+            await db.commit()
+            return {"success": False, "message": "Unable to map crawled page to CMS resource"}
+
         try:
             result = await adapter.apply_fix(cms_page_id, field, new_value)
         except Exception as exc:
             logger.exception("apply_fix_adapter_error", issue_id=str(issue.id))
+            issue.fix_status = FIX_STATUS_APPLY_FAILED
+            db.add(ChangeLog(
+                org_id=site.org_id,
+                site_id=site.id,
+                issue_id=issue.id,
+                action="fix_deploy_failed",
+                actor_type="system",
+                old_value=issue.current_value,
+                new_value=new_value,
+                extra_metadata={"reason": "adapter_error", "message": str(exc)},
+            ))
+            await db.commit()
             return {"success": False, "message": f"Adapter error: {exc}"}
 
         if result.success:
-            issue.fix_status = "applied"
+            issue.fix_status = FIX_STATUS_DEPLOYED
             issue.applied_at = datetime.now(timezone.utc)
             if not issue.rollback_value:
                 issue.rollback_value = result.rollback_value or issue.current_value
@@ -235,13 +316,33 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                 org_id=site.org_id,
                 site_id=site.id,
                 issue_id=issue.id,
-                action="fix_pushed_to_cms",
+                action="fix_deployed",
                 actor_type="system",
                 old_value=issue.current_value,
                 new_value=new_value,
+                extra_metadata={
+                    "connection_type": site.connection_type,
+                    "field": field,
+                    "source_page_id": cms_page_id,
+                },
             ))
         else:
-            issue.fix_status = "apply_failed"
+            issue.fix_status = FIX_STATUS_APPLY_FAILED
+            db.add(ChangeLog(
+                org_id=site.org_id,
+                site_id=site.id,
+                issue_id=issue.id,
+                action="fix_deploy_failed",
+                actor_type="system",
+                old_value=issue.current_value,
+                new_value=new_value,
+                extra_metadata={
+                    "connection_type": site.connection_type,
+                    "field": field,
+                    "source_page_id": cms_page_id,
+                    "message": result.message,
+                },
+            ))
 
         await db.commit()
         return {"success": result.success, "message": result.message}
@@ -251,20 +352,8 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
 
 def _issue_to_field(issue_type: str) -> str:
     """Map an issue type to the CMS field that the AI fix should write to."""
-    mapping = {
-        "missing_title": "title",
-        "title_too_short": "title",
-        "title_too_long": "title",
-        "duplicate_title": "title",
-        "missing_meta_description": "meta_description",
-        "meta_description_too_long": "meta_description",
-        "duplicate_meta_description": "meta_description",
-        "missing_canonical": "canonical",
-        "missing_h1": "h1",
-        "missing_schema": "schema",
-        "images_missing_alt_text": "alt_text",
-    }
-    return mapping.get(issue_type, "title")
+    from packages.shared.seo_domain import issue_to_fix_field
+    return issue_to_fix_field(issue_type)
 
 
 def _decrypt_site_creds(org_id: str, site) -> dict:
@@ -309,3 +398,61 @@ def _adapter_kwargs(site, creds: dict) -> dict:
     if ct == "snippet":
         return {"site_token": str(site.snippet_token)}
     return {"domain": site.domain}
+
+
+async def _resolve_cms_page_id(db, site, page, adapter, page_source_model) -> str:
+    """Resolve the real CMS resource ID for a crawled page."""
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from urllib.parse import urlparse
+    from packages.crawler.url_utils import normalize_url, urls_match_resource
+
+    if not page:
+        return ""
+
+    normalized_public_url = normalize_url(page.url)
+    existing = (await db.execute(
+        select(page_source_model).where(
+            page_source_model.site_id == site.id,
+            page_source_model.public_url == normalized_public_url,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        if existing.page_id != page.id:
+            existing.page_id = page.id
+            existing.last_synced_at = datetime.now(timezone.utc)
+            await db.flush()
+        return existing.source_page_id
+
+    candidates = await adapter.list_pages(limit=max(int(site.crawl_max_pages or 500), 500))
+    site_base = site.domain if str(site.domain).startswith("http") else f"https://{site.domain}"
+
+    for candidate in candidates:
+        if not urls_match_resource(page.url, candidate.url, site_domain=site_base):
+            continue
+
+        source_path = None
+        raw = candidate.raw or {}
+        if isinstance(raw, dict):
+            source_path = raw.get("path") or raw.get("slug")
+        if not source_path and candidate.url:
+            parsed_candidate = urlparse(candidate.url)
+            source_path = parsed_candidate.path or None
+
+        source = page_source_model(
+            site_id=site.id,
+            org_id=site.org_id,
+            page_id=page.id,
+            public_url=normalized_public_url,
+            source_page_id=str(candidate.id),
+            source_path=source_path,
+            source_url=candidate.url or None,
+            connection_type=site.connection_type,
+            source_metadata=raw if isinstance(raw, dict) else None,
+            last_synced_at=datetime.now(timezone.utc),
+        )
+        db.add(source)
+        await db.flush()
+        return str(candidate.id)
+
+    return ""

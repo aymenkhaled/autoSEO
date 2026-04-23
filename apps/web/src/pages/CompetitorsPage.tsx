@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 function useCompetitors(siteId: string) {
   return useQuery({
     queryKey: ['competitors', siteId],
-    queryFn: () => apiClient.get('/competitors', { searchParams: { site_id: siteId } }).json<any>(),
+    queryFn: () => apiClient.get('competitors', { searchParams: { site_id: siteId } }).json<any>(),
     enabled: !!siteId,
   })
 }
@@ -17,7 +17,7 @@ function useCompetitors(siteId: string) {
 function useAddCompetitor() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: any) => apiClient.post('/competitors', { json: data }).json<any>(),
+    mutationFn: (data: any) => apiClient.post('competitors', { json: data }).json<any>(),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['competitors', vars.site_id] })
       toast.success('Competitor added')
@@ -30,7 +30,7 @@ function useRemoveCompetitor() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id }: { id: string; site_id: string }) =>
-      apiClient.delete(`/competitors/${id}`).json<any>(),
+      apiClient.delete(`competitors/${id}`),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['competitors', vars.site_id] })
       toast.success('Competitor removed')

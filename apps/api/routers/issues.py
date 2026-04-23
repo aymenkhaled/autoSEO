@@ -15,13 +15,9 @@ from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import IssueResponse, IssueListResponse
 from models.tables import Issue, Page
+from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, issue_is_auto_fixable, normalize_fix_status
 
 router = APIRouter(tags=["issues"])
-
-
-# Auto-fixable issue types (kept in sync with the AI engine)
-_BULK_FIXABLE = {"missing_meta_description", "missing_alt_text", "broken_canonical",
-                 "title_too_short", "title_too_long", "meta_description_too_long"}
 
 
 @router.get("", response_model=IssueListResponse)
@@ -55,8 +51,10 @@ async def list_issues(
         query = query.where(Issue.severity == severity)
         count_query = count_query.where(Issue.severity == severity)
     if fix_status:
-        query = query.where(Issue.fix_status == fix_status)
-        count_query = count_query.where(Issue.fix_status == fix_status)
+        normalized = normalize_fix_status(fix_status)
+        status_values = [FIX_STATUS_DEPLOYED, "applied"] if normalized == FIX_STATUS_DEPLOYED else [normalized]
+        query = query.where(Issue.fix_status.in_(status_values))
+        count_query = count_query.where(Issue.fix_status.in_(status_values))
     if fix_type:
         query = query.where(Issue.fix_type == fix_type)
         count_query = count_query.where(Issue.fix_type == fix_type)
@@ -94,7 +92,9 @@ async def list_aggregated_issues(
     if severity:
         conditions.append(Issue.severity == severity)
     if fix_status:
-        conditions.append(Issue.fix_status == fix_status)
+        normalized = normalize_fix_status(fix_status)
+        status_values = [FIX_STATUS_DEPLOYED, "applied"] if normalized == FIX_STATUS_DEPLOYED else [normalized]
+        conditions.append(Issue.fix_status.in_(status_values))
 
     # Aggregate at the DB level to keep this cheap on large sites
     agg = (await db.execute(
@@ -128,7 +128,7 @@ async def list_aggregated_issues(
             "count": int(row.count or 0),
             "total_impact": int(row.total_impact or 0),
             "fix_type": row.fix_type,
-            "can_bulk_fix": row.type in _BULK_FIXABLE,
+            "can_bulk_fix": issue_is_auto_fixable(row.type),
             "sample_urls": list(sample_urls),
         })
 

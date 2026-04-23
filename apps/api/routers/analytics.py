@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from models.tables import Crawl, Issue, Site
+from packages.shared.seo_domain import FIX_STATUS_DEPLOYED
 
 router = APIRouter(tags=["analytics"])
 
@@ -37,7 +38,7 @@ async def get_analytics_overview(
     # Issues breakdown
     issues_q = select(Issue.severity, func.count(Issue.id)).where(
         Issue.org_id == auth.org_id,
-        Issue.fix_status != "applied",
+        Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, "applied"]),
     ).group_by(Issue.severity)
     if site_id:
         issues_q = issues_q.where(Issue.site_id == site_id)

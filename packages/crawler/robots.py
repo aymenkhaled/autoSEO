@@ -8,6 +8,8 @@ import httpx
 from urllib.robotparser import RobotFileParser
 from urllib.parse import urljoin, urlparse
 
+from packages.crawler.url_utils import is_safe_url
+
 
 # Module-level cache: { (host, user_agent): (parser, fetched_at_unix) }
 _CACHE: dict[tuple[str, str], tuple[RobotFileParser, float]] = {}
@@ -29,11 +31,13 @@ async def get_robots_rules(domain: str, user_agent: str = "AutoSEO") -> RobotFil
         return cached[0]
 
     robots_url = urljoin(_host_key(domain) + "/", "robots.txt")
+    if not is_safe_url(robots_url):
+        return parser
     parser = RobotFileParser()
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(robots_url, timeout=10)
-            if resp.status_code == 200:
+            if resp.status_code == 200 and is_safe_url(str(resp.url)):
                 parser.parse(resp.text.splitlines())
     except Exception:
         # Empty parser → allows everything by default

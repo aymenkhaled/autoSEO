@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 function useKeywords(siteId: string) {
   return useQuery({
     queryKey: ['keywords', siteId],
-    queryFn: () => apiClient.get('/keywords', { searchParams: { site_id: siteId } }).json<any>(),
+    queryFn: () => apiClient.get('keywords', { searchParams: { site_id: siteId } }).json<any>(),
     enabled: !!siteId,
   })
 }
@@ -17,7 +17,7 @@ function useKeywords(siteId: string) {
 function useAddKeyword() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: any) => apiClient.post('/keywords', { json: data }).json<any>(),
+    mutationFn: (data: any) => apiClient.post('keywords', { json: data }).json<any>(),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['keywords', vars.site_id] })
       toast.success('Keyword added for tracking')
@@ -30,7 +30,7 @@ function useDeleteKeyword() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id }: { id: string; site_id: string }) =>
-      apiClient.delete(`/keywords/${id}`).json<any>(),
+      apiClient.delete(`keywords/${id}`),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['keywords', vars.site_id] })
       toast.success('Keyword removed')

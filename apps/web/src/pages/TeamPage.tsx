@@ -8,14 +8,14 @@ import { toast } from 'sonner'
 function useTeam() {
   return useQuery({
     queryKey: ['team'],
-    queryFn: () => apiClient.get('/team').json<any>(),
+    queryFn: () => apiClient.get('team').json<any>(),
   })
 }
 
 function useInvite() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: any) => apiClient.post('/team/invite', { json: data }).json<any>(),
+    mutationFn: (data: any) => apiClient.post('team/invite', { json: data }).json<any>(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['team'] })
       toast.success('Invitation sent')
@@ -27,7 +27,7 @@ function useInvite() {
 function useRemoveMember() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/team/${id}`).json<any>(),
+    mutationFn: (id: string) => apiClient.delete(`team/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['team'] })
       toast.success('Member removed')

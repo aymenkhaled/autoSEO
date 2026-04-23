@@ -43,6 +43,10 @@ class SiteResponse(BaseModel):
     respect_robots_txt: bool
     crawl_delay_ms: int
     status: str
+    ownership_verified: bool = False
+    verification_method: Optional[str] = None
+    verification_requested_at: Optional[datetime] = None
+    verified_at: Optional[datetime] = None
     last_crawled_at: Optional[datetime] = None
     created_at: datetime
 

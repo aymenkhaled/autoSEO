@@ -3,6 +3,8 @@
 -- Version 1.0 — All tables, indexes, RLS, functions
 -- ============================================
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ORGANIZATIONS
 CREATE TABLE IF NOT EXISTS organizations (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

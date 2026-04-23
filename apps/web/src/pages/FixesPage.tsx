@@ -16,7 +16,7 @@ function useFixableIssues(fixStatus: string, siteId?: string | null) {
   if (siteId) searchParams.site_id = siteId
   return useQuery({
     queryKey: ['fixes', fixStatus, siteId ?? 'all'],
-    queryFn: () => apiClient.get('/issues', { searchParams }).json<any>(),
+    queryFn: () => apiClient.get('issues', { searchParams }).json<any>(),
   })
 }
 
@@ -24,7 +24,7 @@ function useApplyFix() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (issue_id: string) =>
-      apiClient.post('/fixes/apply', { json: { issue_id } }).json<any>(),
+      apiClient.post('fixes/apply', { json: { issue_id } }).json<any>(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['fixes'] })
       qc.invalidateQueries({ queryKey: ['issues'] })
@@ -38,7 +38,7 @@ function useRollbackFix() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (issue_id: string) =>
-      apiClient.post('/fixes/rollback', { json: { issue_id } }).json<any>(),
+      apiClient.post('fixes/rollback', { json: { issue_id } }).json<any>(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['fixes'] })
       qc.invalidateQueries({ queryKey: ['issues'] })
@@ -71,7 +71,7 @@ export default function FixesPage() {
   const [siteId, setSiteId] = useState<string | null>(null)
 
   const { data: pendingData, isLoading: pendingLoading } = useFixableIssues('pending', siteId)
-  const { data: appliedData } = useFixableIssues('applied', siteId)
+  const { data: appliedData } = useFixableIssues('deployed', siteId)
   const { data: rolledBackData } = useFixableIssues('rolled_back', siteId)
   const applyFix = useApplyFix()
   const rollback = useRollbackFix()
@@ -107,7 +107,7 @@ export default function FixesPage() {
       <div className="grid grid-cols-3 gap-4">
         {[
           { icon: Clock,        label: 'Pending Review', value: pendingCount,    color: 'bg-amber-500/10 text-amber-500' },
-          { icon: CheckCircle2, label: 'Applied',        value: appliedCount,    color: 'bg-green-500/10 text-green-500' },
+          { icon: CheckCircle2, label: 'Deployed',       value: appliedCount,    color: 'bg-green-500/10 text-green-500' },
           { icon: RotateCcw,    label: 'Reverted',       value: rolledBackCount, color: 'bg-slate-500/10 text-slate-500' },
         ].map((s, i) => (
           <motion.div key={s.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -192,13 +192,13 @@ export default function FixesPage() {
         </div>
       )}
 
-      {/* Applied fixes history */}
+      {/* Deployed fixes history */}
       {applied.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">Applied Fixes</h2>
-            <span className="text-xs text-muted-foreground">{appliedCount} applied</span>
+            <h2 className="text-sm font-semibold text-foreground">Deployed Fixes</h2>
+            <span className="text-xs text-muted-foreground">{appliedCount} deployed</span>
           </div>
           <div className="divide-y divide-border">
             {applied.map((issue: any, i: number) => {
@@ -214,7 +214,7 @@ export default function FixesPage() {
                     <p className="text-sm font-medium text-foreground capitalize">{title}</p>
                     {issue.applied_at && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Applied {new Date(issue.applied_at).toLocaleDateString()}
+                        Deployed {new Date(issue.applied_at).toLocaleDateString()}
                       </p>
                     )}
                   </div>

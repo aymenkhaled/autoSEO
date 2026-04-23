@@ -45,12 +45,7 @@ class CrawlerAdapter(BaseCMSAdapter):
 
 
 class SnippetAdapter(BaseCMSAdapter):
-    """Snippet-based adapter — fixes are stored on our backend and the JS
-    snippet on the user's page reads them at runtime via the beacon endpoint.
-
-    `apply_fix` here only returns success — actual application happens
-    inside /snippet/{site_token} which serves the cached fix payload.
-    """
+    """Snippet-based adapter used for read-only monitoring/install guidance."""
 
     def __init__(self, site_token: str | None = None):
         self.site_token = site_token
@@ -65,9 +60,7 @@ class SnippetAdapter(BaseCMSAdapter):
         raise NotImplementedError("Snippet adapter does not support get_page")
 
     async def apply_fix(self, page_id: str, field: str, new_value: str) -> ApplyResult:
-        # The actual write happens at the snippet endpoint when the browser fetches it.
         return ApplyResult(
-            success=True,
-            message=f"Fix queued for delivery via snippet ({field})",
-            applied_at=datetime.utcnow().isoformat(),
+            success=False,
+            message="Snippet mode currently collects live SEO data but does not auto-deploy fixes.",
         )

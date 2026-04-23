@@ -9,14 +9,14 @@ import { formatRelativeTime } from '@/lib/utils'
 function useApiKeys() {
   return useQuery({
     queryKey: ['api-keys'],
-    queryFn: () => apiClient.get('/api-keys').json<any>(),
+    queryFn: () => apiClient.get('api-keys').json<any>(),
   })
 }
 
 function useCreateKey() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: any) => apiClient.post('/api-keys', { json: data }).json<any>(),
+    mutationFn: (data: any) => apiClient.post('api-keys', { json: data }).json<any>(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['api-keys'] }),
     onError: () => toast.error('Failed to create API key'),
   })
@@ -25,7 +25,7 @@ function useCreateKey() {
 function useRevokeKey() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/api-keys/${id}`).json<any>(),
+    mutationFn: (id: string) => apiClient.delete(`api-keys/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['api-keys'] })
       toast.success('API key revoked')

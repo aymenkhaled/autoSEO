@@ -47,7 +47,7 @@ async def list_change_log(
                 "actor_id": str(e.actor_id) if e.actor_id else None,
                 "old_value": e.old_value,
                 "new_value": e.new_value,
-                "metadata": e.metadata,
+                "metadata": e.extra_metadata,
                 "created_at": e.created_at.isoformat() if e.created_at else None,
             }
             for e in entries

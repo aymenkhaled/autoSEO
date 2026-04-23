@@ -15,7 +15,7 @@ import { useSites } from '@/hooks/use-data'
 function useAnalyticsOverview(siteId?: string) {
   return useQuery({
     queryKey: ['analytics', 'overview', siteId],
-    queryFn: () => apiClient.get('/analytics/overview', { searchParams: siteId ? { site_id: siteId } : {} }).json<any>(),
+    queryFn: () => apiClient.get('analytics/overview', { searchParams: siteId ? { site_id: siteId } : {} }).json<any>(),
   })
 }
 
@@ -23,7 +23,7 @@ function useScoreHistory(siteId: string, days: number) {
   return useQuery({
     queryKey: ['analytics', 'score-history', siteId, days],
     queryFn: () =>
-      apiClient.get('/analytics/score-history', { searchParams: { site_id: siteId, days: String(days) } }).json<any>(),
+      apiClient.get('analytics/score-history', { searchParams: { site_id: siteId, days: String(days) } }).json<any>(),
     enabled: !!siteId,
   })
 }
@@ -31,7 +31,7 @@ function useScoreHistory(siteId: string, days: number) {
 function useIssuesTrend() {
   return useQuery({
     queryKey: ['analytics', 'issues-trend'],
-    queryFn: () => apiClient.get('/analytics/issues-trend').json<any>(),
+    queryFn: () => apiClient.get('analytics/issues-trend').json<any>(),
   })
 }
 

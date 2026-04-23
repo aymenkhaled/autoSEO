@@ -27,8 +27,10 @@ from schemas.connection import (
 from models.tables import Site
 from packages.cms_adapters import get_adapter
 from packages.shared.encryption import encrypt_credential
+from config import get_settings
 
 router = APIRouter(tags=["connections"])
+settings = get_settings()
 
 
 def _build_kwargs(creds: ConnectionCredentials, site: Site | None = None) -> dict:
@@ -101,7 +103,7 @@ async def get_connection_status(
         connection_type=site.connection_type,  # type: ignore[arg-type]
         configured=bool(site.cms_token_encrypted) or site.connection_type in ("crawler", "snippet"),
         snippet_token=snippet_token,
-        snippet_url=f"/snippet/{snippet_token}.js" if snippet_token else None,
+        snippet_url=f"{settings.API_URL.rstrip('/')}/api/v1/snippet/{snippet_token}.js" if snippet_token else None,
     )
 
 
@@ -178,7 +180,7 @@ async def save_connection(
         configured=True,
         last_tested_at=datetime.now(timezone.utc).isoformat(),
         snippet_token=snippet_token,
-        snippet_url=f"/snippet/{snippet_token}.js" if snippet_token else None,
+        snippet_url=f"{settings.API_URL.rstrip('/')}/api/v1/snippet/{snippet_token}.js" if snippet_token else None,
     )
 
 

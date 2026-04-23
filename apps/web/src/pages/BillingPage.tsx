@@ -6,7 +6,7 @@ import { apiClient } from '@/lib/api-client'
 function useUsage() {
   return useQuery({
     queryKey: ['usage'],
-    queryFn: () => apiClient.get('/usage').json<any>(),
+    queryFn: () => apiClient.get('usage').json<any>(),
   })
 }
 

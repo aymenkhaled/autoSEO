@@ -4,6 +4,7 @@ from fastapi.responses import StreamingResponse
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from uuid import UUID
 import asyncio
 import json
@@ -52,7 +53,14 @@ async def trigger_crawl(
         trigger=data.trigger,
     )
     db.add(crawl)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A crawl is already active for this site",
+        )
     await db.refresh(crawl)
 
     # Dispatch the crawl: prefer Celery (production) but fall back to in-process

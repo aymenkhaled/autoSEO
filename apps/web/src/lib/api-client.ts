@@ -1,10 +1,13 @@
 import ky from 'ky'
 import { supabase } from './supabase'
 
-const API_BASE = '/api'
+const API_BASE = typeof window !== 'undefined'
+  ? window.location.origin
+  : 'http://localhost:8001'
 
 export const api = ky.extend({
-  prefix: API_BASE,
+  baseUrl: API_BASE,
+  prefix: '/api/v1/',
   timeout: 30000,
   hooks: {
     beforeRequest: [
@@ -63,6 +66,10 @@ export const issuesApi = {
   get: (id: string) => api.get(`issues/${id}`).json<any>(),
 }
 
+export const dashboardApi = {
+  overview: () => api.get('org/dashboard').json<any>(),
+}
+
 // Fixes
 export const fixesApi = {
   apply: (issueId: string) =>
@@ -98,6 +105,32 @@ export const connectionsApi = {
     api.put(`sites/${siteId}/connection`, { json: payload }).json<any>(),
   remove: (siteId: string) =>
     api.delete(`sites/${siteId}/connection`),
+}
+
+export const snippetApi = {
+  installCode: (siteId: string) =>
+    api.get('snippet/install-code', { searchParams: { site_id: siteId } }).json<any>(),
+}
+
+export const reportsApi = {
+  list: () => api.get('reports').json<any>(),
+  create: (data: any) => api.post('reports', { json: data }).json<any>(),
+  generate: (data: any) => api.post('reports/generate', { json: data }).json<any>(),
+}
+
+export const notificationsApi = {
+  list: () => api.get('notifications').json<any>(),
+  markRead: (id: string) => api.post(`notifications/${id}/read`).json<any>(),
+  markAllRead: () => api.post('notifications/read-all').json<any>(),
+  preferences: () => api.get('notifications/preferences').json<any>(),
+  updatePreferences: (data: any) => api.put('notifications/preferences', { json: data }).json<any>(),
+}
+
+export const webhooksApi = {
+  list: () => api.get('webhooks').json<any>(),
+  create: (data: any) => api.post('webhooks', { json: data }).json<any>(),
+  test: (id: string) => api.post(`webhooks/${id}/test`).json<any>(),
+  deliveries: (id: string) => api.get(`webhooks/${id}/deliveries`).json<any>(),
 }
 
 // Alias for pages that import apiClient directly
