@@ -1,0 +1,139 @@
+Skip to content
+aymenkhaled
+aymenKh
+Repository navigation
+Code
+Issues
+Pull requests
+Actions
+Projects
+Wiki
+Security and quality
+Insights
+Settings
+Owner avatar
+aymenKh
+Public
+aymenkhaled/aymenKh
+Go to file
+t
+T
+Name		
+aymenkhaled
+aymenkhaled
+feat: relaunch freelancer portfolio positioning
+f8fa6b3
+ · 
+yesterday
+public
+feat: relaunch freelancer portfolio positioning
+yesterday
+src
+feat: relaunch freelancer portfolio positioning
+yesterday
+.gitignore
+Initial commit from Create Next App
+3 weeks ago
+AGENTS.md
+Initial commit from Create Next App
+3 weeks ago
+CLAUDE.md
+Initial commit from Create Next App
+3 weeks ago
+README.md
+feat: relaunch freelancer portfolio positioning
+yesterday
+eslint.config.mjs
+Initial commit from Create Next App
+3 weeks ago
+next.config.ts
+wip
+3 weeks ago
+package-lock.json
+wip
+3 weeks ago
+package.json
+wip
+3 weeks ago
+postcss.config.mjs
+Initial commit from Create Next App
+3 weeks ago
+tsconfig.json
+Initial commit from Create Next App
+3 weeks ago
+Repository files navigation
+README
+Aymen Khaled - Freelancer Portfolio
+Client-focused portfolio for freelance AI SaaS, automation, and full-stack projects.
+
+Local setup
+npm install
+npm run dev
+npm run build
+Profile source
+Primary content lives in:
+
+src/data/portfolio.ts
+Use public/pic.png as the official profile image.
+
+Calendly
+The booking section embeds:
+
+https://calendly.com/khaledaymen850
+The app accepts both the base scheduling URL and future event URLs such as /30min. If an event URL gives 404, create and publish that event in Calendly, then copy the exact share link.
+
+Vercel Analytics
+The app includes @vercel/analytics/next. Enable Web Analytics in the Vercel dashboard for this project, then redeploy.
+
+Quality checks
+Before publishing, verify there are no placeholder testimonials, broken images, old stats, or missing contact links.
+
+About
+No description, website, or topics provided.
+Resources
+ Readme
+ Activity
+Stars
+ 0 stars
+Watchers
+ 0 watching
+Forks
+ 0 forks
+Releases
+No releases published
+Create a new release
+Deployments
+1
+ Production – aymen-kh yesterday
+Packages
+No packages published
+Publish your first package
+Contributors
+2
+@levicap
+levicap Ahmed Benyahia
+@aymenkhaled
+aymenkhaled
+Languages
+TypeScript
+92.6%
+ 
+CSS
+6.9%
+ 
+JavaScript
+0.5%
+Suggested workflows
+Based on your tech stack
+SLSA Generic generator logo
+SLSA Generic generator
+Generate SLSA3 provenance for your existing release workflows
+Deno logo
+Deno
+Test your Deno project
+Webpack logo
+Webpack
+Build a NodeJS project with npm and webpack.
+More workflows
+
+Apollo
