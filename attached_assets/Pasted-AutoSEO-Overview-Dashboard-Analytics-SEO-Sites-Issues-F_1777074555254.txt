@@ -1,0 +1,152 @@
+AutoSEO
+Overview
+
+Dashboard
+Analytics
+SEO
+
+Sites
+Issues
+Fixes
+Keywords
+Competitors
+Reports
+
+Reports
+Account
+
+Team
+Integrations
+API Keys
+Billing
+Settings
+KH
+khaledaymen850@gmail.com
+
+free plan · Local auth
+
+
+
+
+
+KH
+Issues
+Root causes first, raw rows only when you need debugging detail.(4 affected pages/items)
+
+Filters
+1
+Root causes
+Raw issues
+Search root causes
+
+https://aymen-kh.vercel.app
+
+All severities
+
+Pending
+Clear filters
+Use issue categories and root-cause groups over raw totals; crawl limits, free-tier sampling, and pagination can change the number of rows without changing the underlying problems.
+Medium
+Technical
+1 affected
+Missing sitemap.xml
+AutoSEO could not verify a public /sitemap.xml endpoint.
+
+Impact 50
+Why it matters
+
+Sitemaps help discovery, freshness, and large-site crawl coverage.
+
+Recommended fix
+
+Publish a valid XML sitemap and reference it from robots.txt.
+
+Examples
+
+Site-wide issue
+
+/sitemap.xml returned 404
+
+Fix workflow
+
+GitHub PR ready
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Technical
+1 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 45
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Low
+Meta Tags
+1 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 30
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Low
+Schema
+1 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 25
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Made with Replit
+
+
+Apollo
