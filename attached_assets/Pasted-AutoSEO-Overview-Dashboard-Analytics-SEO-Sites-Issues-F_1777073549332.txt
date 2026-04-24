@@ -1,0 +1,130 @@
+AutoSEO
+Overview
+
+Dashboard
+Analytics
+SEO
+
+Sites
+Issues
+Fixes
+Keywords
+Competitors
+Reports
+
+Reports
+Account
+
+Team
+Integrations
+API Keys
+Billing
+Settings
+KH
+khaledaymen850@gmail.com
+
+free plan · Local auth
+
+
+
+
+
+KH
+Integrations
+Monitoring finds issues. Fix deployment needs a real writable integration. Outbound webhooks notify other tools.
+
+Webhooks are not WordPress/Shopify/Webflow/GitHub connections. They send AutoSEO events to systems like Zapier, Make, Slack, or your own backend.
+
+Site Connections
+
+aymen
+
+Monitoring: Crawler monitoring - Write integration: Not configured
+
+Monitoring only
+Configure
+
+rat
+
+Monitoring: Crawler monitoring - Write integration: Not configured
+
+Monitoring only
+Configure
+
+smartpaie
+
+Monitoring: Crawler monitoring - Write integration: Not configured
+
+Monitoring only
+Configure
+
+strategy
+
+Monitoring: Crawler monitoring - Write integration: Not configured
+
+Monitoring only
+Configure
+Outbound Webhooks
+Add
+Sends JSON POST requests to your endpoint.
+
+Verify `X-AutoSEO-Signature` using HMAC-SHA256 over the raw body.
+
+No outbound webhooks configured.
+Configure aymen
+Pick the monitoring method or the real fix deployment method. Audit still uses the public crawler.
+
+
+Monitoring / fix deployment method
+
+GitHub
+GitHub
+
+Uses repo-limited access for file-based sites. AutoSEO creates reviewable PRs; it does not silently push to production.
+
+Can fix canonical
+Can fix meta_description
+Can fix title
+Only the listed fields can be auto-deployed; other issues remain manual.
+
+Recommended: GitHub App PR-only access
+
+Install the AutoSEO GitHub App on one selected repo. AutoSEO creates branches and PRs; it does not push to main or deploy silently.
+
+Installation ID
+Returned by GitHub after install
+Install GitHub App
+Complete app setup
+Configure GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_SLUG before using GitHub App install.
+
+Advanced fallback
+
+If the GitHub App is not configured yet, use a fine-grained token limited to one repo with Contents and Pull Requests read/write.
+
+Owner
+aymenkhaled
+Repository
+aymenKh
+Branch
+main
+Project root
+apps/web or blank
+Build command
+npm run build
+Package manager
+npm
+GitHub token
+•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+Verify ownership from the site Setup page before saving WordPress, Shopify, Webflow, or GitHub deployment credentials.
+
+Sandbox test only
+Use this to verify UI/API wiring without real WordPress, Shopify, Webflow, or GitHub credentials. Sandbox tests cannot be saved.
+Connected successfully
+Test connection
+Analyze repo
+Save real connection
+Made with Replit
+
+
+Apollo
+1Password menu is available. Press down arrow to select.
