@@ -132,6 +132,34 @@ async def _deliver_webhook(db: AsyncSession, webhook: Webhook, event: str, paylo
     return delivery
 
 
+async def emit_outbound_webhooks(db: AsyncSession, org_id, event: str, data: dict) -> list[dict]:
+    """Fan out product events to enabled org webhooks that subscribed to them."""
+    rows = (
+        await db.execute(
+            select(Webhook).where(Webhook.org_id == org_id, Webhook.enabled == True)
+        )
+    ).scalars().all()
+    deliveries: list[dict] = []
+    for webhook in rows:
+        subscribed = set(webhook.events or [])
+        if event not in subscribed and "*" not in subscribed:
+            continue
+        payload = {
+            "event": event,
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "org_id": str(org_id),
+            "data": data,
+        }
+        delivery = await _deliver_webhook(db, webhook, event, payload)
+        deliveries.append({
+            "webhook_id": str(webhook.id),
+            "delivery_id": str(delivery.id),
+            "success": delivery.success,
+            "status_code": delivery.status_code,
+        })
+    return deliveries
+
+
 @router.get("")
 async def list_outbound_webhooks(
     auth: AuthContext = Depends(get_current_user),

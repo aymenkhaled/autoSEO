@@ -262,6 +262,43 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                     "field": field,
                 },
             )
+            try:
+                from routers.webhooks import emit_outbound_webhooks
+
+                await emit_outbound_webhooks(
+                    db,
+                    site.org_id,
+                    "fix.apply_failed",
+                    {
+                        "site_id": str(site.id),
+                        "issue_id": str(issue.id),
+                        "connection_type": site.connection_type,
+                        "field": field,
+                        "message": message,
+                    },
+                )
+            except Exception as exc:
+                logger.debug("fix_failed_webhook_fanout_failed", error=str(exc))
+
+        if not getattr(site, "ownership_verified", False):
+            issue.fix_status = FIX_STATUS_APPLY_FAILED
+            db.add(ChangeLog(
+                org_id=site.org_id,
+                site_id=site.id,
+                issue_id=issue.id,
+                action="fix_deploy_failed",
+                actor_type="system",
+                old_value=issue.current_value,
+                new_value=issue.proposed_fix,
+                extra_metadata={
+                    "reason": "ownership_not_verified",
+                    "connection_type": site.connection_type,
+                    "field": field,
+                },
+            ))
+            await _notify_apply_failed("Site ownership must be verified before deployment")
+            await db.commit()
+            return {"success": False, "message": "Site ownership must be verified before deployment"}
 
         if not issue_can_auto_deploy(issue.type, site.connection_type):
             issue.fix_status = FIX_STATUS_APPLY_FAILED
@@ -390,6 +427,23 @@ async def _apply_ai_fix_async(issue_id: str, site_id: str) -> dict:
                     "field": field,
                 },
             )
+            try:
+                from routers.webhooks import emit_outbound_webhooks
+
+                await emit_outbound_webhooks(
+                    db,
+                    site.org_id,
+                    "fix.deployed",
+                    {
+                        "site_id": str(site.id),
+                        "issue_id": str(issue.id),
+                        "connection_type": site.connection_type,
+                        "field": field,
+                        "message": result.message,
+                    },
+                )
+            except Exception as exc:
+                logger.debug("fix_deployed_webhook_fanout_failed", error=str(exc))
         else:
             issue.fix_status = FIX_STATUS_APPLY_FAILED
             db.add(ChangeLog(
@@ -459,6 +513,7 @@ def _adapter_kwargs(site, creds: dict) -> dict:
             "repo": creds.get("repo") or (site.github_repo or "").split("/", 1)[-1],
             "token": creds.get("token", ""),
             "branch": site.github_branch or "main",
+            "project_root": creds.get("project_root", ""),
         }
     if ct == "snippet":
         return {"site_token": str(site.snippet_token)}

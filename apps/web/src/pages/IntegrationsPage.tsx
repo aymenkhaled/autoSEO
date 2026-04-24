@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, Code2, Globe, Info, Plus, Send, Settings, Webhook, X } from 'lucide-react'
+import { Code2, Globe, Info, Plus, Send, Settings, Webhook, X } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -29,6 +29,9 @@ const CONNECTION_FIELDS: Record<ConnectionType, Array<{ key: keyof ConnectionPay
     { key: 'owner', label: 'Owner' },
     { key: 'repo', label: 'Repository' },
     { key: 'branch', label: 'Branch', placeholder: 'main' },
+    { key: 'project_root', label: 'Project root', placeholder: 'apps/web or blank' },
+    { key: 'build_command', label: 'Build command', placeholder: 'npm run build' },
+    { key: 'package_manager', label: 'Package manager', placeholder: 'npm' },
     { key: 'github_token', label: 'GitHub token', secret: true },
   ],
 }
@@ -72,6 +75,8 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
   const capabilities = capabilitiesQuery.data?.capabilities ?? []
   const selectedCapability = capabilities.find((item: any) => item.connection_type === form.connection_type)
   const fields = CONNECTION_FIELDS[form.connection_type]
+  const isWritableChoice = !['crawler', 'snippet'].includes(form.connection_type)
+  const needsVerification = isWritableChoice && !site.ownership_verified
 
   const updateField = (key: keyof ConnectionPayload, value: string | boolean) => {
     setForm(current => ({ ...current, [key]: value }))
@@ -85,7 +90,7 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-base font-semibold text-foreground">Configure {site.name}</h2>
-            <p className="text-xs text-muted-foreground mt-1">Pick how AutoSEO should test and, when supported, deploy fixes.</p>
+            <p className="text-xs text-muted-foreground mt-1">Pick the monitoring method or the real fix deployment method. Audit still uses the public crawler.</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <X className="h-5 w-5" />
@@ -94,7 +99,7 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
 
         <div className="space-y-5">
           <div>
-            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Connection method</label>
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Monitoring / fix deployment method</label>
             <select value={form.connection_type} onChange={(event) => updateField('connection_type', event.target.value as ConnectionType)}
               className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground">
               {capabilities.map((item: any) => (
@@ -142,6 +147,12 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
             </div>
           )}
 
+          {needsVerification && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Verify ownership from the site Setup page before saving WordPress, Shopify, Webflow, or GitHub deployment credentials.
+            </div>
+          )}
+
           <label className="flex items-start gap-3 rounded-xl border border-border bg-background p-3 cursor-pointer">
             <input
               type="checkbox"
@@ -166,7 +177,7 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
               className="flex-1 h-10 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50">
               {testConnection.isPending ? 'Testing...' : 'Test connection'}
             </button>
-            <button onClick={() => saveConnection.mutate({ ...form, sandbox: false })} disabled={saveConnection.isPending || form.sandbox}
+            <button onClick={() => saveConnection.mutate({ ...form, sandbox: false })} disabled={saveConnection.isPending || form.sandbox || needsVerification}
               className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
               {saveConnection.isPending ? 'Saving...' : 'Save real connection'}
             </button>
@@ -179,7 +190,7 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
 
 function WebhookModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({ name: '', url: '', events: 'crawl.completed,fix.deployed,webhook.test' })
+  const [form, setForm] = useState({ name: '', url: '', events: 'crawl.completed,fix.pr_created,fix.deployed,fix.apply_failed,webhook.test' })
 
   const createWebhook = useMutation({
     mutationFn: (data: any) => webhooksApi.create(data),
@@ -279,7 +290,7 @@ export default function IntegrationsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Integrations</h1>
-        <p className="text-sm text-muted-foreground mt-1">CMS connections deploy fixes. Outbound webhooks notify other tools.</p>
+        <p className="text-sm text-muted-foreground mt-1">Monitoring finds issues. Fix deployment needs a real writable integration. Outbound webhooks notify other tools.</p>
       </div>
 
       <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 flex items-start gap-3">
@@ -312,9 +323,9 @@ export default function IntegrationsPage() {
                     </p>
                   </button>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${site.connection_type !== 'crawler' && site.connection_type !== 'snippet' ? 'bg-green-500/10 text-green-500' : 'bg-muted text-muted-foreground'}`}>
-                      {site.connection_type !== 'crawler' && site.connection_type !== 'snippet' && <CheckCircle2 className="h-3 w-3" />}
-                      {site.connection_type === 'crawler' || site.connection_type === 'snippet' ? 'Monitoring only' : 'Write ready'}
+                    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${site.connection_type !== 'crawler' && site.connection_type !== 'snippet' ? 'bg-amber-500/10 text-amber-300' : 'bg-muted text-muted-foreground'}`}>
+                      {site.connection_type !== 'crawler' && site.connection_type !== 'snippet' && <Info className="h-3 w-3" />}
+                      {site.connection_type === 'crawler' || site.connection_type === 'snippet' ? 'Monitoring only' : 'Write setup needed'}
                     </span>
                     <button
                       onClick={() => {

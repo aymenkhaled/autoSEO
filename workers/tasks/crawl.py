@@ -149,6 +149,29 @@ async def _check_og_image(page_url: str, og_image: str | None) -> tuple[bool | N
     return ok, status_code, candidate
 
 
+def _coverage_reason(
+    *,
+    discovered: int,
+    planned: int,
+    limit: int,
+    sitemap_had_urls: bool,
+) -> tuple[str, dict]:
+    if not sitemap_had_urls:
+        return (
+            "No sitemap URLs were discovered, so AutoSEO scanned the homepage only.",
+            {"reason": "no_sitemap_urls", "source": "homepage_fallback"},
+        )
+    if discovered > planned and planned >= limit:
+        return (
+            f"AutoSEO discovered {discovered} safe URLs but scanned {planned} because this site's crawl limit is {limit}.",
+            {"reason": "crawl_limit_reached", "source": "sitemap", "limit": limit},
+        )
+    return (
+        f"AutoSEO scanned all {planned} safe URLs discovered from the sitemap.",
+        {"reason": "all_discovered_urls_scanned", "source": "sitemap"},
+    )
+
+
 async def _fetch_one(
     url: str,
     semaphore: asyncio.Semaphore,
@@ -260,13 +283,37 @@ async def _async_crawl(site_id: str, crawl_id: str):
                     except Exception:
                         pass
 
+                    sitemap_had_urls = bool(raw_urls)
                     if not raw_urls:
                         raw_urls = [domain]
 
-                    urls = [url for url in dedupe_urls(raw_urls) if is_safe_url(url)][: site.crawl_max_pages]
-                    await db.execute(_set_crawl_total(crawl_id, len(urls)))
+                    safe_urls = [url for url in dedupe_urls(raw_urls) if is_safe_url(url)]
+                    urls = safe_urls[: site.crawl_max_pages]
+                    coverage_reason, coverage_details = _coverage_reason(
+                        discovered=len(safe_urls),
+                        planned=len(urls),
+                        limit=int(site.crawl_max_pages or 0),
+                        sitemap_had_urls=sitemap_had_urls,
+                    )
+                    await db.execute(
+                        _set_crawl_total(
+                            crawl_id,
+                            len(urls),
+                            urls_discovered=len(safe_urls),
+                            urls_skipped=max(len(safe_urls) - len(urls), 0),
+                            crawl_limit=int(site.crawl_max_pages or 0),
+                            coverage_reason=coverage_reason,
+                            coverage_details=coverage_details,
+                        )
+                    )
                     await db.commit()
-                    logger.info("crawl_urls_planned", count=len(urls))
+                    logger.info(
+                        "crawl_urls_planned",
+                        count=len(urls),
+                        discovered=len(safe_urls),
+                        skipped=max(len(safe_urls) - len(urls), 0),
+                        limit=site.crawl_max_pages,
+                    )
 
                     semaphore = asyncio.Semaphore(MAX_CONCURRENT_FETCHES)
                     broken_url_codes: dict[str, int] = {}
@@ -594,6 +641,29 @@ async def _async_crawl(site_id: str, crawl_id: str):
                     await db.commit()
 
                     try:
+                        from routers.webhooks import emit_outbound_webhooks
+
+                        await emit_outbound_webhooks(
+                            db,
+                            site.org_id,
+                            "crawl.completed",
+                            {
+                                "site_id": site_id,
+                                "site_name": site.name,
+                                "crawl_id": crawl_id,
+                                "pages_crawled": len(extracted),
+                                "pages_total": crawl.pages_total,
+                                "urls_discovered": crawl.urls_discovered or 0,
+                                "urls_skipped": crawl.urls_skipped or 0,
+                                "crawl_limit": crawl.crawl_limit,
+                                "issues_found": len(deduped_issues),
+                                "seo_score": site_score,
+                            },
+                        )
+                    except Exception as exc:
+                        logger.debug("crawl_webhook_fanout_failed", error=str(exc))
+
+                    try:
                         from workers.tasks.fix import run_ai_analysis
 
                         if os.environ.get("REDIS_URL"):
@@ -635,11 +705,27 @@ def _select_crawl(crawl_id: str):
     return select(Crawl).where(Crawl.id == crawl_id)
 
 
-def _set_crawl_total(crawl_id: str, total: int):
+def _set_crawl_total(
+    crawl_id: str,
+    total: int,
+    *,
+    urls_discovered: int = 0,
+    urls_skipped: int = 0,
+    crawl_limit: int | None = None,
+    coverage_reason: str | None = None,
+    coverage_details: dict | None = None,
+):
     from sqlalchemy import update
     from models.tables import Crawl
 
-    return update(Crawl).where(Crawl.id == crawl_id).values(pages_total=total)
+    return update(Crawl).where(Crawl.id == crawl_id).values(
+        pages_total=total,
+        urls_discovered=urls_discovered,
+        urls_skipped=urls_skipped,
+        crawl_limit=crawl_limit,
+        coverage_reason=coverage_reason,
+        coverage_details=coverage_details,
+    )
 
 
 async def _noop(*a, **k):

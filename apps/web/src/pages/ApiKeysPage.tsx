@@ -133,7 +133,29 @@ export default function ApiKeysPage() {
   -H "Authorization: Bearer autoseo_YOUR_KEY"`}
           </code>
           <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
-{`curl ${apiBase}/api/v1/issues \\
+{`curl ${apiBase}/api/v1/issues/aggregated?site_id=SITE_ID \\
+  -H "X-AutoSEO-Key: autoseo_YOUR_KEY"`}
+          </code>
+          <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
+{`curl -X POST ${apiBase}/api/v1/crawls \\
+  -H "Authorization: Bearer autoseo_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"site_id":"SITE_ID","trigger":"manual"}'`}
+          </code>
+          <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
+{`curl -X POST ${apiBase}/api/v1/reports/generate \\
+  -H "Authorization: Bearer autoseo_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"site_id":"SITE_ID"}'`}
+          </code>
+          <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
+{`curl -X POST ${apiBase}/api/v1/webhooks \\
+  -H "Authorization: Bearer autoseo_YOUR_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"name":"Zapier","url":"https://example.com/hook","events":["crawl.completed"]}'`}
+          </code>
+          <code className="block rounded-lg bg-muted p-3 text-[11px] text-foreground overflow-x-auto whitespace-pre">
+{`curl ${apiBase}/api/v1/sites/SITE_ID/connection/capabilities \\
   -H "X-AutoSEO-Key: autoseo_YOUR_KEY"`}
           </code>
         </div>

@@ -122,6 +122,15 @@ export default function ReportsPage() {
                     Since previous crawl: score {report.changed_since_last_crawl.score_delta >= 0 ? '+' : ''}{report.changed_since_last_crawl.score_delta}, issues {report.changed_since_last_crawl.issues_delta >= 0 ? '+' : ''}{report.changed_since_last_crawl.issues_delta}, pages {report.changed_since_last_crawl.pages_delta >= 0 ? '+' : ''}{report.changed_since_last_crawl.pages_delta}.
                   </p>
                 )}
+                {report.summary.coverage_reason && (
+                  <div className="mt-3 rounded-lg border border-border bg-background p-3">
+                    <p className="text-xs font-semibold text-foreground">Coverage note</p>
+                    <p className="text-xs text-muted-foreground mt-1">{report.summary.coverage_reason}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Discovered {report.summary.urls_discovered ?? 0}, scanned {report.summary.pages_crawled ?? 0}, skipped {report.summary.urls_skipped ?? 0}, limit {report.summary.crawl_limit ?? '-'}.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {report.note && (

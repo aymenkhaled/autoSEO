@@ -61,6 +61,14 @@ async def apply_fix(
             detail="No proposed fix available for this issue",
         )
 
+    site = (await db.execute(select(Site).where(Site.id == issue.site_id))).scalar_one_or_none()
+    can_auto_deploy = bool(site and issue_can_auto_deploy(issue.type, site.connection_type))
+    if can_auto_deploy and site and not site.ownership_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verify site ownership before AutoSEO can deploy or create repository changes. Crawling and manual review still work.",
+        )
+
     # Gap 22: snapshot the pre-fix value into fix_versions BEFORE mutating the issue
     snapshot = FixVersion(
         issue_id=issue.id,
@@ -80,9 +88,6 @@ async def apply_fix(
 
     issue.fix_status = FIX_STATUS_APPROVED
     issue.applied_by = auth.user_id
-
-    site = (await db.execute(select(Site).where(Site.id == issue.site_id))).scalar_one_or_none()
-    can_auto_deploy = bool(site and issue_can_auto_deploy(issue.type, site.connection_type))
 
     log_entry = ChangeLog(
         org_id=auth.org_id,

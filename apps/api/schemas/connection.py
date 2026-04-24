@@ -30,6 +30,9 @@ class ConnectionCredentials(BaseModel):
     repo: Optional[str] = None
     branch: Optional[str] = "main"
     github_token: Optional[str] = None  # named separately to avoid clashing with Webflow `token`
+    project_root: Optional[str] = ""
+    build_command: Optional[str] = None
+    package_manager: Optional[str] = None
 
 
 class ConnectionTestResponse(BaseModel):

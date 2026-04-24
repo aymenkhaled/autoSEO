@@ -313,3 +313,142 @@ def test_notify_org_users_persists_notification_payload():
     assert created == 1
     assert saved[0].type == "webhook.delivery"
     assert saved[0].data["webhook_id"] == "wh-123"
+
+
+def test_writable_connection_requires_site_verification():
+    user, org = run(seed_user())
+
+    async def seed_site():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="GitHub Site", domain="https://github-site.test", connection_type="crawler")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site())
+    response = run(api_request(
+        "PUT",
+        f"/api/v1/sites/{site_id}/connection",
+        headers=auth_headers(user),
+        json={
+            "connection_type": "github",
+            "owner": "owner",
+            "repo": "repo",
+            "branch": "main",
+            "github_token": "ghp_test",
+        },
+    ))
+    assert response.status_code == 403
+    assert "Verify site ownership" in response.json()["detail"]
+
+
+def test_root_cause_workflow_reports_missing_github_requirements():
+    user, org = run(seed_user())
+
+    async def seed_issue():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="SPA Site", domain="https://spa-site.test", connection_type="crawler")
+            session.add(site)
+            await session.flush()
+            crawl = Crawl(site_id=site.id, org_id=org.id, status="completed")
+            session.add(crawl)
+            await session.flush()
+            page = Page(crawl_id=crawl.id, site_id=site.id, org_id=org.id, url=f"{site.domain}/pricing")
+            session.add(page)
+            await session.flush()
+            session.add(
+                Issue(
+                    crawl_id=crawl.id,
+                    site_id=site.id,
+                    org_id=org.id,
+                    page_id=page.id,
+                    type="spa_no_prerender",
+                    category="rendering",
+                    severity="critical",
+                    impact_score=95,
+                    fix_type="manual",
+                    fix_status="pending",
+                )
+            )
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_issue())
+    response = run(api_request(
+        "POST",
+        "/api/v1/issues/root-cause-fix",
+        headers=auth_headers(user),
+        json={"site_id": str(site_id), "issue_type": "spa_no_prerender", "mode": "plan"},
+    ))
+    assert response.status_code == 200, response.text
+    workflow = response.json()["fix_workflow"]
+    assert workflow["can_create_github_pr"] is False
+    assert any("GitHub" in item for item in workflow["missing_requirements"])
+    assert any("Verify" in item for item in workflow["missing_requirements"])
+    assert workflow["manual_steps"]
+
+
+def test_api_key_root_cause_fix_requires_write_fixes_scope():
+    user, org = run(seed_user())
+    raw_key = "autoseo_read_issues_only"
+
+    async def seed_key_and_site():
+        async with AsyncSessionLocal() as session:
+            session.add(
+                ApiKey(
+                    org_id=org.id,
+                    name="Read Issues Key",
+                    key_hash=hashlib.sha256(raw_key.encode("utf-8")).hexdigest(),
+                    key_prefix=raw_key[:12],
+                    scopes=["read:issues"],
+                )
+            )
+            site = Site(org_id=org.id, name="Scope Site", domain="https://scope.test")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_key_and_site())
+    response = run(api_request(
+        "POST",
+        "/api/v1/issues/root-cause-fix",
+        headers={"X-AutoSEO-Key": raw_key},
+        json={"site_id": str(site_id), "issue_type": "missing_sitemap", "mode": "plan"},
+    ))
+    assert response.status_code == 403
+    assert "write:fixes" in response.json()["detail"]
+
+
+def test_crawl_response_exposes_coverage_fields():
+    user, org = run(seed_user())
+
+    async def seed_crawl():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Coverage Site", domain="https://coverage.test")
+            session.add(site)
+            await session.flush()
+            crawl = Crawl(
+                site_id=site.id,
+                org_id=org.id,
+                status="completed",
+                trigger="manual",
+                pages_crawled=10,
+                pages_total=10,
+                urls_discovered=30,
+                urls_skipped=20,
+                crawl_limit=10,
+                coverage_reason="AutoSEO discovered 30 safe URLs but scanned 10 because this site's crawl limit is 10.",
+                coverage_details={"reason": "crawl_limit_reached"},
+            )
+            session.add(crawl)
+            await session.commit()
+            return crawl.id
+
+    crawl_id = run(seed_crawl())
+    response = run(api_request("GET", f"/api/v1/crawls/{crawl_id}", headers=auth_headers(user)))
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["urls_discovered"] == 30
+    assert payload["urls_skipped"] == 20
+    assert payload["crawl_limit"] == 10
+    assert payload["coverage_details"]["reason"] == "crawl_limit_reached"

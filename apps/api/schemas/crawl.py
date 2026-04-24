@@ -18,6 +18,11 @@ class CrawlResponse(BaseModel):
     trigger: str
     pages_crawled: int
     pages_total: Optional[int] = None
+    urls_discovered: int = 0
+    urls_skipped: int = 0
+    crawl_limit: Optional[int] = None
+    coverage_reason: Optional[str] = None
+    coverage_details: Optional[dict] = None
     issues_found: int
     seo_score: Optional[int] = None
     started_at: Optional[datetime] = None
@@ -40,5 +45,9 @@ class CrawlProgress(BaseModel):
     status: str
     pages_crawled: int
     pages_total: Optional[int] = None
+    urls_discovered: int = 0
+    urls_skipped: int = 0
+    crawl_limit: Optional[int] = None
+    coverage_reason: Optional[str] = None
     current_url: Optional[str] = None
     percentage: Optional[float] = None

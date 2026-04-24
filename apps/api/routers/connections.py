@@ -56,6 +56,7 @@ def _build_kwargs(creds: ConnectionCredentials, site: Site | None = None) -> dic
             "repo": creds.repo or "",
             "token": creds.github_token or "",
             "branch": creds.branch or "main",
+            "project_root": creds.project_root or "",
         }
     if ct == "crawler":
         return {"domain": site.domain if site else ""}
@@ -81,6 +82,9 @@ def _persistable_creds(creds: ConnectionCredentials) -> dict:
         return {
             "owner": creds.owner, "repo": creds.repo,
             "token": creds.github_token, "branch": creds.branch or "main",
+            "project_root": creds.project_root or "",
+            "build_command": creds.build_command,
+            "package_manager": creds.package_manager,
         }
     return {}
 
@@ -189,6 +193,12 @@ async def save_connection(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Sandbox checks are test-only and cannot be saved as a real connection",
+        )
+
+    if creds.connection_type not in ("crawler", "snippet") and not site.ownership_verified:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Verify site ownership before saving a writable integration. Crawling still works without verification.",
         )
 
     # Always re-test before saving to avoid storing dud creds

@@ -11,6 +11,7 @@ const ICON_MAP: Record<string, { icon: any; color: string }> = {
   fix_applied: { icon: CheckCircle2, color: 'text-green-500 bg-green-500/10' },
   crawl_complete: { icon: RefreshCw, color: 'text-cyan-500 bg-cyan-500/10' },
   'crawl.completed': { icon: RefreshCw, color: 'text-cyan-500 bg-cyan-500/10' },
+  'fix.pr_created': { icon: ExternalLink, color: 'text-blue-500 bg-blue-500/10' },
   'fix.deployed': { icon: CheckCircle2, color: 'text-green-500 bg-green-500/10' },
   'fix.apply_failed': { icon: AlertTriangle, color: 'text-amber-500 bg-amber-500/10' },
   'webhook.delivery': { icon: FileText, color: 'text-blue-500 bg-blue-500/10' },

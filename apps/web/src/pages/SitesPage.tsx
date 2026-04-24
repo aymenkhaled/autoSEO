@@ -12,12 +12,12 @@ import { connectionSummary, deriveSiteCardState } from '@/lib/readiness'
 import { formatRelativeTime } from '@/lib/utils'
 
 const CONNECTION_TYPES = [
-  { value: 'crawler', label: 'Web Crawler (default)' },
-  { value: 'wordpress', label: 'WordPress API' },
-  { value: 'shopify', label: 'Shopify API' },
-  { value: 'webflow', label: 'Webflow API' },
-  { value: 'github', label: 'GitHub App' },
-  { value: 'snippet', label: 'JS Snippet' },
+  { value: 'crawler', label: 'Crawler monitoring (audit only)' },
+  { value: 'snippet', label: 'Snippet monitoring (runtime signals)' },
+  { value: 'github', label: 'GitHub PR fixing (requires setup)' },
+  { value: 'wordpress', label: 'WordPress fixing (requires setup)' },
+  { value: 'shopify', label: 'Shopify fixing (requires setup)' },
+  { value: 'webflow', label: 'Webflow fixing (requires setup)' },
 ]
 
 export default function SitesPage() {
@@ -26,7 +26,7 @@ export default function SitesPage() {
   const createSite = useCreateSite()
   const triggerCrawl = useTriggerCrawl()
   const [showAdd, setShowAdd] = useState(false)
-  const [newSite, setNewSite] = useState({ name: '', domain: '', connection_type: 'crawler' })
+  const [newSite, setNewSite] = useState({ name: '', domain: '', connection_type: 'crawler', crawl_max_pages: 500 })
   const [menuOpen, setMenuOpen] = useState<string | null>(null)
   const [siteToDelete, setSiteToDelete] = useState<any | null>(null)
 
@@ -37,7 +37,7 @@ export default function SitesPage() {
     try {
       await createSite.mutateAsync(newSite)
       setShowAdd(false)
-      setNewSite({ name: '', domain: '', connection_type: 'crawler' })
+      setNewSite({ name: '', domain: '', connection_type: 'crawler', crawl_max_pages: 500 })
     } catch (err) {
       console.error('Failed to add site:', err)
     }
@@ -210,7 +210,7 @@ export default function SitesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Connection Method</label>
+                  <label className="text-sm font-medium text-foreground">Monitoring / fix deployment starting point</label>
                   <div className="relative">
                     <select value={newSite.connection_type} onChange={(e) => setNewSite({ ...newSite, connection_type: e.target.value })}
                       className="w-full h-10 bg-background border border-border rounded-lg px-3 pr-8 text-sm text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all">
@@ -220,6 +220,19 @@ export default function SitesPage() {
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Max pages per crawl</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50000}
+                    value={newSite.crawl_max_pages}
+                    onChange={(e) => setNewSite({ ...newSite, crawl_max_pages: Number(e.target.value) })}
+                    className="w-full h-10 bg-background border border-border rounded-lg px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Audit uses the public crawler for every method. Writable integrations are configured after the site is added and verified.</p>
                 </div>
 
                 <div className="flex gap-3 pt-2">

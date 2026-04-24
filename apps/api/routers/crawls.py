@@ -289,6 +289,10 @@ async def crawl_progress_sse(
                     "status": current.status,
                     "pages_crawled": current.pages_crawled,
                     "pages_total": current.pages_total,
+                    "urls_discovered": current.urls_discovered or 0,
+                    "urls_skipped": current.urls_skipped or 0,
+                    "crawl_limit": current.crawl_limit,
+                    "coverage_reason": current.coverage_reason,
                     "percentage": (
                         round(current.pages_crawled / current.pages_total * 100, 1)
                         if current.pages_total and current.pages_total > 0

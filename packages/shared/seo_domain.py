@@ -15,6 +15,12 @@ FIX_STATUS_DEPLOYED: Final[str] = "deployed"
 FIX_STATUS_APPLY_FAILED: Final[str] = "apply_failed"
 FIX_STATUS_ROLLED_BACK: Final[str] = "rolled_back"
 FIX_STATUS_REJECTED_UNSAFE: Final[str] = "rejected_unsafe"
+FIX_STATUS_DIAGNOSED: Final[str] = "diagnosed"
+FIX_STATUS_MANUAL_INSTRUCTIONS_READY: Final[str] = "manual_instructions_ready"
+FIX_STATUS_GITHUB_PR_READY: Final[str] = "github_pr_ready"
+FIX_STATUS_GITHUB_PR_CREATED: Final[str] = "github_pr_created"
+FIX_STATUS_DEPLOYED_AFTER_MERGE: Final[str] = "deployed_after_merge"
+FIX_STATUS_CANNOT_AUTO_FIX: Final[str] = "cannot_auto_fix"
 
 LEGACY_FIX_STATUS_ALIASES: Final[dict[str, str]] = {
     "applied": FIX_STATUS_DEPLOYED,

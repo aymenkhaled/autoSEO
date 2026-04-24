@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { motion } from 'framer-motion'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -121,6 +122,8 @@ export default function SiteDetailPage() {
   const [tab, setTab] = useState<TabId>(TABS.some((item) => item.id === initialTab) ? initialTab : 'setup')
   const [activeCrawlId, setActiveCrawlId] = useState<string | null>(null)
   const [showDelete, setShowDelete] = useState(false)
+  const [crawlLimit, setCrawlLimit] = useState('500')
+  const [workflowPanel, setWorkflowPanel] = useState<any | null>(null)
 
   const siteQuery = useQuery({
     queryKey: ['site', id],
@@ -193,6 +196,12 @@ export default function SiteDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['site-active-crawl', id] })
   }, [id, progress?.status, queryClient])
 
+  useEffect(() => {
+    if (siteQuery.data?.crawl_max_pages) {
+      setCrawlLimit(String(siteQuery.data.crawl_max_pages))
+    }
+  }, [siteQuery.data?.crawl_max_pages])
+
   const triggerCrawl = useMutation({
     mutationFn: () => api.post('crawls', { json: { site_id: id, trigger: 'manual' } }).json<any>(),
     onSuccess: (crawl) => {
@@ -212,6 +221,36 @@ export default function SiteDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['site', id] })
       queryClient.invalidateQueries({ queryKey: ['site-summary', id] })
+    },
+  })
+
+  const updateCrawlSettings = useMutation({
+    mutationFn: () => sitesApi.update(id!, { crawl_max_pages: Number(crawlLimit) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['site', id] })
+      queryClient.invalidateQueries({ queryKey: ['site-summary', id] })
+      toast.success('Crawl limit updated')
+    },
+    onError: () => toast.error('Crawl limit could not be updated'),
+  })
+
+  const planRootCauseFix = useMutation({
+    mutationFn: (group: any) => issuesApi.rootCauseFix({ site_id: id!, issue_type: group.type, mode: 'plan' }),
+    onSuccess: (result) => setWorkflowPanel(result),
+    onError: (error: any) => toast.error(error?.message || 'Fix workflow could not be loaded'),
+  })
+
+  const createGithubPr = useMutation({
+    mutationFn: (group: any) => issuesApi.rootCauseFix({ site_id: id!, issue_type: group.type, mode: 'github_pr' }),
+    onSuccess: (result) => {
+      setWorkflowPanel(result)
+      queryClient.invalidateQueries({ queryKey: ['site-issues-grouped', id] })
+      queryClient.invalidateQueries({ queryKey: ['site-issues-raw', id] })
+      toast.success('GitHub PR created')
+    },
+    onError: async (error: any) => {
+      const detail = error?.response ? await error.response.json().catch(() => null) : null
+      toast.error(detail?.detail?.message || detail?.detail || error?.message || 'GitHub PR could not be created')
     },
   })
 
@@ -314,6 +353,11 @@ export default function SiteDetailPage() {
             <span className="font-medium text-foreground">Crawl status: {progress.status}</span>
             <span className="text-muted-foreground">{progress.pages_crawled}/{progress.pages_total ?? '-'} pages</span>
           </div>
+          {progress.coverage_reason && (
+            <p className="text-xs text-muted-foreground">
+              {progress.coverage_reason}
+            </p>
+          )}
           <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-cyan-500 to-blue-600"
@@ -427,7 +471,7 @@ export default function SiteDetailPage() {
               </div>
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-4">
+            <div className="grid lg:grid-cols-3 gap-4">
               <div className="rounded-xl border border-border bg-card p-6 space-y-3">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -453,6 +497,37 @@ export default function SiteDetailPage() {
                     {snippetInstallQuery.data.script_tag}
                   </code>
                 )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Layers3 className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Crawl coverage</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The crawler scans public URLs discovered from the sitemap, then stops at this site's limit. If you saw only 10 pages, this panel shows whether the sitemap only exposed 10 URLs or the limit stopped the crawl.
+                </p>
+                <label className="text-xs font-medium text-muted-foreground block">Max pages per crawl</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={50000}
+                    value={crawlLimit}
+                    onChange={(event) => setCrawlLimit(event.target.value)}
+                    className="w-full h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
+                  />
+                  <button
+                    onClick={() => updateCrawlSettings.mutate()}
+                    disabled={updateCrawlSettings.isPending || Number(crawlLimit) < 1}
+                    className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Current plan limit shown by backend: {summary?.latest_crawl?.crawl_limit ?? site.crawl_max_pages ?? 'not crawled yet'}.
+                </p>
               </div>
 
               <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-6 space-y-3">
@@ -489,6 +564,34 @@ export default function SiteDetailPage() {
                   <p className="text-xs text-muted-foreground mt-1">{card.label}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Crawl coverage</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Shows why issue totals can change when page coverage changes.
+                  </p>
+                </div>
+                <TinyPill label={`Limit: ${summary?.latest_crawl?.crawl_limit ?? site.crawl_max_pages ?? '-'}`} />
+              </div>
+              <div className="grid sm:grid-cols-4 gap-3 mt-4">
+                {[
+                  { label: 'Discovered URLs', value: summary?.latest_crawl?.urls_discovered ?? 0 },
+                  { label: 'Scanned URLs', value: summary?.latest_crawl?.pages_crawled ?? 0 },
+                  { label: 'Skipped URLs', value: summary?.latest_crawl?.urls_skipped ?? 0 },
+                  { label: 'Crawl limit', value: summary?.latest_crawl?.crawl_limit ?? site.crawl_max_pages ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-lg bg-muted/30 p-3">
+                    <p className="text-lg font-bold text-foreground">{item.value}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.label}</p>
+                  </div>
+                ))}
+              </div>
+              {summary?.latest_crawl?.coverage_reason && (
+                <p className="text-xs text-muted-foreground mt-3">{summary.latest_crawl.coverage_reason}</p>
+              )}
             </div>
 
             {(summary?.audit_note || groupedIssuesQuery.data?.note) && (
@@ -549,11 +652,73 @@ export default function SiteDetailPage() {
                           </div>
                         </div>
                       )}
+                      {group.fix_workflow && (
+                        <div className="rounded-lg border border-border bg-card p-3 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">Fix workflow</p>
+                              <p className="text-[11px] text-muted-foreground mt-1">{group.fix_workflow.truth_note}</p>
+                            </div>
+                            <TinyPill label={group.fix_workflow.can_create_github_pr ? 'GitHub PR ready' : 'Needs setup'} />
+                          </div>
+                          {group.fix_workflow.missing_requirements?.length > 0 && (
+                            <ul className="space-y-1">
+                              {group.fix_workflow.missing_requirements.map((item: string) => (
+                                <li key={item} className="text-[11px] text-amber-300">{item}</li>
+                              ))}
+                            </ul>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => planRootCauseFix.mutate(group)}
+                              disabled={planRootCauseFix.isPending}
+                              className="h-8 px-3 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                            >
+                              View exact fix steps
+                            </button>
+                            {group.fix_workflow.can_create_github_pr && (
+                              <button
+                                onClick={() => createGithubPr.mutate(group)}
+                                disabled={createGithubPr.isPending}
+                                className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                              >
+                                Create GitHub PR
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </article>
                   ))
                 )}
               </div>
             </div>
+
+            {workflowPanel && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-5 space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">{workflowPanel.title || 'Root-cause fix workflow'}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{workflowPanel.summary || workflowPanel.github?.message}</p>
+                  </div>
+                  <button onClick={() => setWorkflowPanel(null)} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
+                </div>
+                {workflowPanel.fix_workflow?.manual_steps?.length > 0 && (
+                  <ol className="space-y-2">
+                    {workflowPanel.fix_workflow.manual_steps.map((step: string, index: number) => (
+                      <li key={step} className="text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{index + 1}. </span>{step}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {workflowPanel.github?.pr_url && (
+                  <a href={workflowPanel.github.pr_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs text-primary hover:underline">
+                    Open GitHub PR <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         )}
 

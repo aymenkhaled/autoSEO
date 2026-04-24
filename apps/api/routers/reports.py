@@ -232,6 +232,11 @@ async def generate_report(
         "summary": {
             "seo_score": target_crawl.seo_score,
             "pages_crawled": target_crawl.pages_crawled,
+            "pages_total": target_crawl.pages_total,
+            "urls_discovered": target_crawl.urls_discovered or 0,
+            "urls_skipped": target_crawl.urls_skipped or 0,
+            "crawl_limit": target_crawl.crawl_limit,
+            "coverage_reason": target_crawl.coverage_reason,
             "issues_found": target_crawl.issues_found,
             "severity_counts": {severity: int(count) for severity, count in severity_rows},
         },

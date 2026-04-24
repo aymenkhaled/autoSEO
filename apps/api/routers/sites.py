@@ -279,6 +279,12 @@ async def get_site_summary(
             "status": latest_crawl.status,
             "seo_score": latest_crawl.seo_score,
             "pages_crawled": latest_crawl.pages_crawled,
+            "pages_total": latest_crawl.pages_total,
+            "urls_discovered": latest_crawl.urls_discovered or 0,
+            "urls_skipped": latest_crawl.urls_skipped or 0,
+            "crawl_limit": latest_crawl.crawl_limit,
+            "coverage_reason": latest_crawl.coverage_reason,
+            "coverage_details": latest_crawl.coverage_details or {},
             "issues_found": latest_crawl.issues_found,
             "completed_at": latest_crawl.completed_at.isoformat() if latest_crawl.completed_at else None,
         }

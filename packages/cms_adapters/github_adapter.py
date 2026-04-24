@@ -18,7 +18,10 @@ import base64
 import json
 import logging
 import os
+import re
+from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -45,11 +48,13 @@ class GitHubAdapter(BaseCMSAdapter):
         repo: str,
         token: str,
         branch: str = "main",
+        project_root: str = "",
     ):
         self.owner = owner
         self.repo = repo
         self.token = token
         self.branch = branch
+        self.project_root = project_root.strip().strip("/")
         self._framework: Optional[str] = None
 
     def _headers(self) -> dict:
@@ -75,11 +80,17 @@ class GitHubAdapter(BaseCMSAdapter):
             "astro.config.ts": "astro",
             "next.config.js": "nextjs",
             "next.config.ts": "nextjs",
+            "vite.config.js": "vite_react",
+            "vite.config.ts": "vite_react",
+            "vite.config.mjs": "vite_react",
+            "vite.config.mts": "vite_react",
+            "remix.config.js": "remix",
+            "remix.config.ts": "remix",
             "_config.yml": "jekyll",
             "config.toml": "hugo",
         }
         resp = await client.get(
-            f"{GH_API}/repos/{self.owner}/{self.repo}/contents/",
+            f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{self.project_root}",
             headers=self._headers(),
         )
         if resp.status_code == 200:
@@ -87,7 +98,73 @@ class GitHubAdapter(BaseCMSAdapter):
             for marker, fw in markers.items():
                 if marker in files:
                     return fw
+            if "package.json" in files and "src" in files and "public" in files:
+                return "react_spa"
         return "unknown"
+
+    async def analyze_static_app(self, project_root: str | None = None) -> dict:
+        """Return a small repository readiness report for static-app SEO fixes."""
+        root = (project_root if project_root is not None else self.project_root).strip().strip("/")
+        prefix = f"{root}/" if root else ""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            tree_resp = await client.get(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/git/trees/{self.branch}",
+                params={"recursive": "1"},
+                headers=self._headers(),
+            )
+            if tree_resp.status_code != 200:
+                return {
+                    "framework": "unknown",
+                    "project_root": root,
+                    "error": f"Could not list repository tree: {tree_resp.status_code}",
+                    "safe_file_fixes": [],
+                    "plan_only_fixes": [],
+                }
+
+            paths = {
+                item.get("path", "")
+                for item in tree_resp.json().get("tree", [])
+                if item.get("type") == "blob"
+            }
+            root_paths = {path[len(prefix):] for path in paths if not prefix or path.startswith(prefix)}
+
+            framework = "unknown"
+            if any(path.startswith(("vite.config.",)) for path in root_paths):
+                framework = "vite_react"
+            elif any(path.startswith(("next.config.",)) for path in root_paths) or any(path.startswith(("app/", "pages/")) for path in root_paths):
+                framework = "nextjs"
+            elif any(path.startswith(("astro.config.",)) for path in root_paths):
+                framework = "astro"
+            elif any(path.startswith(("remix.config.",)) for path in root_paths):
+                framework = "remix"
+            elif "package.json" in root_paths and any(path.startswith("src/") for path in root_paths):
+                framework = "react_spa"
+            elif "index.html" in root_paths:
+                framework = "static_html"
+
+            package_manager = "npm"
+            if "pnpm-lock.yaml" in root_paths:
+                package_manager = "pnpm"
+            elif "yarn.lock" in root_paths:
+                package_manager = "yarn"
+            elif "bun.lockb" in root_paths or "bun.lock" in root_paths:
+                package_manager = "bun"
+
+            return {
+                "framework": framework,
+                "project_root": root,
+                "package_manager": package_manager,
+                "files_found": sorted(path for path in root_paths if path in {"package.json", "index.html", "src/App.tsx", "src/main.tsx", "public/robots.txt", "public/sitemap.xml"} or path.startswith(("vite.config.", "next.config.", "astro.config.", "remix.config."))),
+                "safe_file_fixes": ["missing_robots", "missing_sitemap"],
+                "plan_only_fixes": [
+                    "spa_no_prerender",
+                    "duplicate_title",
+                    "stale_schema_date",
+                    "unverified_review_schema",
+                    "missing_offer_schema",
+                    "broken_og_image",
+                ],
+            }
 
     async def list_pages(self, limit: int = 500) -> list[CMSPage]:
         """List markdown/MDX files that likely contain SEO metadata."""
@@ -238,6 +315,234 @@ class GitHubAdapter(BaseCMSAdapter):
                 )
             return ApplyResult(success=False, message=f"PR creation failed: {pr_resp.text[:200]}")
 
+    async def create_static_fix_pr(
+        self,
+        *,
+        issue_type: str,
+        title: str,
+        site_domain: str,
+        affected_urls: list[str],
+        manual_steps: list[str],
+        project_root: str = "",
+        build_command: str | None = None,
+        package_manager: str | None = None,
+    ) -> dict:
+        """Create a reviewable PR for a grouped static-app SEO fix.
+
+        For safe site-root assets we patch files directly. For structural SPA
+        problems we create a clear PR plan rather than pretending AutoSEO knows
+        enough to rewrite the app safely.
+        """
+        root = (project_root or self.project_root).strip().strip("/")
+        normalized_domain = site_domain if site_domain.startswith(("http://", "https://")) else f"https://{site_domain}"
+        base_url = normalized_domain.rstrip("/")
+        safe_issue_file_fixes = issue_type in {"missing_robots", "missing_sitemap"}
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        branch = f"autoseo/{issue_type.replace('_', '-')}-{timestamp}"
+
+        analysis = await self.analyze_static_app(root)
+        files = self._static_fix_files(
+            issue_type=issue_type,
+            root=root,
+            base_url=base_url,
+            affected_urls=affected_urls,
+            manual_steps=manual_steps,
+            analysis=analysis,
+        )
+        mode = "file_patch" if safe_issue_file_fixes and files else "plan_only"
+        if mode == "plan_only":
+            files = {
+                self._rooted_path(root, f"autoseo-fix-plans/{issue_type}-{timestamp}.md"): self._plan_markdown(
+                    issue_type=issue_type,
+                    title=title,
+                    site_domain=base_url,
+                    affected_urls=affected_urls,
+                    manual_steps=manual_steps,
+                    analysis=analysis,
+                    build_command=build_command,
+                    package_manager=package_manager,
+                )
+            }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            base_resp = await client.get(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/git/ref/heads/{self.branch}",
+                headers=self._headers(),
+            )
+            if base_resp.status_code != 200:
+                return {"success": False, "message": "Could not get base branch SHA", "status_code": base_resp.status_code}
+
+            base_sha = base_resp.json()["object"]["sha"]
+            branch_resp = await client.post(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/git/refs",
+                json={"ref": f"refs/heads/{branch}", "sha": base_sha},
+                headers=self._headers(),
+            )
+            if branch_resp.status_code not in (201, 422):
+                return {"success": False, "message": f"Could not create branch: {branch_resp.text[:200]}", "status_code": branch_resp.status_code}
+
+            committed_paths: list[str] = []
+            for path, content in files.items():
+                existing_sha = await self._file_sha(client, path, branch)
+                payload = {
+                    "message": f"fix(seo): {title}",
+                    "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+                    "branch": branch,
+                }
+                if existing_sha:
+                    payload["sha"] = existing_sha
+                commit_resp = await client.put(
+                    f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{path}",
+                    json=payload,
+                    headers=self._headers(),
+                )
+                if commit_resp.status_code not in (200, 201):
+                    return {"success": False, "message": f"Commit failed for {path}: {commit_resp.text[:200]}", "status_code": commit_resp.status_code}
+                committed_paths.append(path)
+
+            pr_body = self._pr_body(
+                issue_type=issue_type,
+                title=title,
+                site_domain=base_url,
+                affected_urls=affected_urls,
+                manual_steps=manual_steps,
+                analysis=analysis,
+                mode=mode,
+                files=committed_paths,
+            )
+            pr_resp = await client.post(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/pulls",
+                json={
+                    "title": f"AutoSEO: {title}",
+                    "head": branch,
+                    "base": self.branch,
+                    "body": pr_body,
+                },
+                headers=self._headers(),
+            )
+            if pr_resp.status_code != 201:
+                return {"success": False, "message": f"PR creation failed: {pr_resp.text[:200]}", "status_code": pr_resp.status_code}
+
+            data = pr_resp.json()
+            return {
+                "success": True,
+                "mode": mode,
+                "message": "GitHub PR created",
+                "pr_url": data.get("html_url"),
+                "pr_number": data.get("number"),
+                "branch": branch,
+                "files_changed": committed_paths,
+                "repo_analysis": analysis,
+            }
+
+    async def _file_sha(self, client: httpx.AsyncClient, path: str, branch: str) -> str | None:
+        resp = await client.get(
+            f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{path}",
+            params={"ref": branch},
+            headers=self._headers(),
+        )
+        if resp.status_code == 200:
+            return resp.json().get("sha")
+        return None
+
+    def _rooted_path(self, root: str, path: str) -> str:
+        return f"{root.strip().strip('/')}/{path}" if root else path
+
+    def _static_fix_files(
+        self,
+        *,
+        issue_type: str,
+        root: str,
+        base_url: str,
+        affected_urls: list[str],
+        manual_steps: list[str],
+        analysis: dict,
+    ) -> dict[str, str]:
+        urls = _clean_urls([base_url, *affected_urls])
+        if issue_type == "missing_robots":
+            return {
+                self._rooted_path(root, "public/robots.txt"): (
+                    "User-agent: *\n"
+                    "Allow: /\n"
+                    f"Sitemap: {base_url}/sitemap.xml\n"
+                )
+            }
+        if issue_type == "missing_sitemap":
+            url_entries = "\n".join(
+                f"  <url><loc>{url}</loc></url>"
+                for url in urls[:500]
+            )
+            return {
+                self._rooted_path(root, "public/sitemap.xml"): (
+                    '<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                    f"{url_entries}\n"
+                    "</urlset>\n"
+                )
+            }
+        return {}
+
+    def _plan_markdown(
+        self,
+        *,
+        issue_type: str,
+        title: str,
+        site_domain: str,
+        affected_urls: list[str],
+        manual_steps: list[str],
+        analysis: dict,
+        build_command: str | None,
+        package_manager: str | None,
+    ) -> str:
+        affected = "\n".join(f"- {url}" for url in _clean_urls(affected_urls)[:25]) or "- Site-wide issue"
+        steps = "\n".join(f"{index}. {step}" for index, step in enumerate(manual_steps, start=1))
+        return (
+            f"# AutoSEO Fix Plan: {title}\n\n"
+            f"- Issue type: `{issue_type}`\n"
+            f"- Site: {site_domain}\n"
+            f"- Detected framework: `{analysis.get('framework', 'unknown')}`\n"
+            f"- Project root: `{analysis.get('project_root') or '.'}`\n"
+            f"- Package manager: `{package_manager or analysis.get('package_manager', 'unknown')}`\n"
+            f"- Build command: `{build_command or 'not configured'}`\n\n"
+            "## Affected URLs\n"
+            f"{affected}\n\n"
+            "## Required implementation\n"
+            f"{steps}\n\n"
+            "## Review notes\n"
+            "AutoSEO created a plan-only PR because this fix changes app structure or business data. "
+            "Review the route, schema, and rendering code before merging.\n"
+        )
+
+    def _pr_body(
+        self,
+        *,
+        issue_type: str,
+        title: str,
+        site_domain: str,
+        affected_urls: list[str],
+        manual_steps: list[str],
+        analysis: dict,
+        mode: str,
+        files: list[str],
+    ) -> str:
+        affected = "\n".join(f"- {url}" for url in _clean_urls(affected_urls)[:25]) or "- Site-wide issue"
+        changed = "\n".join(f"- `{path}`" for path in files) or "- No source files changed"
+        steps = "\n".join(f"- {step}" for step in manual_steps)
+        return (
+            f"## AutoSEO root-cause fix\n\n"
+            f"**Issue:** `{issue_type}` - {title}\n"
+            f"**Site:** {site_domain}\n"
+            f"**Mode:** `{mode}`\n"
+            f"**Detected framework:** `{analysis.get('framework', 'unknown')}`\n\n"
+            "### Files changed\n"
+            f"{changed}\n\n"
+            "### Affected URLs\n"
+            f"{affected}\n\n"
+            "### What to review\n"
+            f"{steps}\n\n"
+            "After merging and deploying, run a new AutoSEO crawl to verify the grouped issue count drops.\n"
+        )
+
 
 def _read_frontmatter(content: str) -> dict:
     """Parse YAML frontmatter from a markdown/MDX file (lightweight, no PyYAML).
@@ -281,3 +586,22 @@ def _patch_frontmatter(content: str, field: str, new_value: str) -> tuple[str, s
 
     new_content = content[:match.start(1)] + new_fm_body + content[match.end(1):]
     return new_content, old_value
+
+
+def _clean_urls(urls: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for url in urls:
+        if not url:
+            continue
+        parsed = urlparse(url if url.startswith(("http://", "https://")) else f"https://{url}")
+        if not parsed.netloc:
+            continue
+        cleaned = f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+        if parsed.query:
+            cleaned = f"{cleaned}?{parsed.query}"
+        if cleaned in seen:
+            continue
+        seen.add(cleaned)
+        out.append(cleaned)
+    return out

@@ -5,17 +5,29 @@ Phase 2 additions:
   so the UI can show "300 pages missing meta description" as one row instead
   of 300 separate rows.
 """
+import json
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
-from typing import Optional
+from typing import Literal, Optional
+from pydantic import BaseModel
 
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import IssueResponse, IssueListResponse
-from models.tables import Issue, Page
-from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, issue_is_auto_fixable, normalize_fix_status
+from models.tables import ChangeLog, Issue, Page, Site
+from packages.cms_adapters.github_adapter import GitHubAdapter
+from packages.shared.encryption import decrypt_credential
+from packages.shared.fix_workflows import build_root_cause_workflow
+from packages.shared.notifications import notify_org_users
+from packages.shared.readiness import connection_status_payload
+from packages.shared.seo_domain import (
+    FIX_STATUS_DEPLOYED,
+    FIX_STATUS_GITHUB_PR_CREATED,
+    issue_is_auto_fixable,
+    normalize_fix_status,
+)
 
 router = APIRouter(tags=["issues"])
 
@@ -94,6 +106,12 @@ DEFAULT_GUIDANCE = {
     "recommended_fix": "Review the affected URLs and update the underlying template, CMS field, or route metadata.",
     "severity_explanation": "Severity is based on estimated SEO impact and affected page count.",
 }
+
+
+class RootCauseFixRequest(BaseModel):
+    site_id: UUID
+    issue_type: str
+    mode: Literal["plan", "github_pr"] = "plan"
 
 
 def _guidance(issue_type: str) -> dict:
@@ -176,6 +194,15 @@ async def list_aggregated_issues(
         status_values = [FIX_STATUS_DEPLOYED, "applied"] if normalized == FIX_STATUS_DEPLOYED else [normalized]
         conditions.append(Issue.fix_status.in_(status_values))
 
+    site_for_workflow = None
+    connection_for_workflow = None
+    if site_id:
+        site_for_workflow = (
+            await db.execute(select(Site).where(Site.id == site_id, Site.org_id == auth.org_id))
+        ).scalar_one_or_none()
+        if site_for_workflow:
+            connection_for_workflow = connection_status_payload(site_for_workflow)
+
     # Aggregate at the DB level to keep this cheap on large sites
     agg = (await db.execute(
         select(
@@ -204,6 +231,10 @@ async def list_aggregated_issues(
         )).all()
         guidance = _guidance(row.type)
         sample_urls = [url for _, _, url in examples if url]
+        workflow_examples = [
+            {"issue_id": str(issue_id), "url": url, "current_value": current_value}
+            for issue_id, current_value, url in examples
+        ]
 
         out.append({
             "type": row.type,
@@ -215,20 +246,173 @@ async def list_aggregated_issues(
             "fix_type": row.fix_type,
             "can_bulk_fix": issue_is_auto_fixable(row.type),
             "sample_urls": list(sample_urls),
-            "examples": [
-                {
-                    "issue_id": str(issue_id),
-                    "url": url,
-                    "current_value": current_value,
-                }
-                for issue_id, current_value, url in examples
-            ],
+            "fix_workflow": build_root_cause_workflow(
+                issue_type=row.type,
+                count=int(row.count or 0),
+                connection=connection_for_workflow,
+                ownership_verified=bool(getattr(site_for_workflow, "ownership_verified", False)),
+                examples=workflow_examples,
+            ),
+            "examples": workflow_examples,
         })
 
     return {
         "groups": out,
         "total_groups": len(out),
         "note": "Use issue categories and root-cause groups over raw totals; crawl limits, free-tier sampling, and pagination can change the number of rows without changing the underlying problems.",
+    }
+
+
+@router.post("/root-cause-fix")
+async def root_cause_fix_workflow(
+    data: RootCauseFixRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return or execute the next action for a grouped/root-cause issue."""
+    issue_type = data.issue_type.strip()
+    site = (
+        await db.execute(select(Site).where(Site.id == data.site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+
+    rows = (
+        await db.execute(
+            select(Issue, Page.url)
+            .join(Page, Issue.page_id == Page.id, isouter=True)
+            .where(
+                Issue.site_id == data.site_id,
+                Issue.org_id == auth.org_id,
+                Issue.type == issue_type,
+                Issue.fix_status == "pending",
+            )
+            .order_by(Issue.impact_score.desc(), Issue.created_at.desc())
+            .limit(50)
+        )
+    ).all()
+    examples = [
+        {
+            "issue_id": str(issue.id),
+            "url": url,
+            "current_value": issue.current_value,
+        }
+        for issue, url in rows
+    ]
+    guidance = _guidance(issue_type)
+    connection = connection_status_payload(site)
+    workflow = build_root_cause_workflow(
+        issue_type=issue_type,
+        count=len(rows),
+        connection=connection,
+        ownership_verified=bool(site.ownership_verified),
+        examples=examples[:8],
+    )
+
+    if data.mode == "plan":
+        return {"mode": "plan", "site_id": str(site.id), "issue_type": issue_type, **guidance, "fix_workflow": workflow}
+
+    if not workflow["can_create_github_pr"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "GitHub PR fixing is not ready for this root cause yet.",
+                "missing_requirements": workflow["missing_requirements"],
+            },
+        )
+
+    creds = _decrypt_site_creds(str(auth.org_id), site)
+    adapter = GitHubAdapter(
+        owner=creds.get("owner") or (site.github_repo or "/").split("/")[0],
+        repo=creds.get("repo") or (site.github_repo or "/").split("/", 1)[-1],
+        token=creds.get("token", ""),
+        branch=creds.get("branch") or site.github_branch or "main",
+        project_root=creds.get("project_root") or "",
+    )
+    result = await adapter.create_static_fix_pr(
+        issue_type=issue_type,
+        title=guidance["title"],
+        site_domain=site.domain,
+        affected_urls=[example["url"] for example in examples if example.get("url")],
+        manual_steps=workflow["manual_steps"],
+        project_root=creds.get("project_root") or "",
+        build_command=creds.get("build_command"),
+        package_manager=creds.get("package_manager"),
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result)
+
+    matching_issues = [issue for issue, _url in rows]
+    for issue in matching_issues:
+        issue.fix_status = FIX_STATUS_GITHUB_PR_CREATED
+        issue.proposed_fix_metadata = {
+            **(issue.proposed_fix_metadata or {}),
+            "workflow": "github_static_root_cause",
+            "issue_type": issue_type,
+            "pr_url": result.get("pr_url"),
+            "pr_number": result.get("pr_number"),
+            "branch": result.get("branch"),
+            "mode": result.get("mode"),
+            "files_changed": result.get("files_changed", []),
+        }
+
+    db.add(
+        ChangeLog(
+            org_id=auth.org_id,
+            site_id=site.id,
+            action="github_fix_pr_created",
+            actor_type="user",
+            actor_id=auth.user_id,
+            new_value=result.get("pr_url"),
+            extra_metadata={
+                "issue_type": issue_type,
+                "affected_count": len(matching_issues),
+                "mode": result.get("mode"),
+                "files_changed": result.get("files_changed", []),
+            },
+        )
+    )
+    await notify_org_users(
+        db,
+        site.org_id,
+        notification_type="fix.pr_created",
+        title=f"GitHub PR created for {site.name}",
+        body=f"{guidance['title']} is now tracked in a GitHub PR.",
+        data={
+            "site_id": str(site.id),
+            "issue_type": issue_type,
+            "pr_url": result.get("pr_url"),
+            "pr_number": result.get("pr_number"),
+        },
+    )
+    await db.commit()
+
+    try:
+        from routers.webhooks import emit_outbound_webhooks
+
+        await emit_outbound_webhooks(
+            db,
+            site.org_id,
+            "fix.pr_created",
+            {
+                "site_id": str(site.id),
+                "site_name": site.name,
+                "issue_type": issue_type,
+                "affected_count": len(matching_issues),
+                "pr_url": result.get("pr_url"),
+                "pr_number": result.get("pr_number"),
+                "mode": result.get("mode"),
+            },
+        )
+    except Exception:
+        pass
+
+    return {
+        "mode": "github_pr",
+        "site_id": str(site.id),
+        "issue_type": issue_type,
+        "fix_workflow": {**workflow, "status": FIX_STATUS_GITHUB_PR_CREATED},
+        "github": result,
     }
 
 
@@ -246,3 +430,13 @@ async def get_issue(
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     return issue
+
+
+def _decrypt_site_creds(org_id: str, site: Site) -> dict:
+    if not site.cms_token_encrypted or not site.cms_token_iv:
+        return {}
+    plaintext = decrypt_credential(org_id, site.cms_token_encrypted, site.cms_token_iv)
+    try:
+        return json.loads(plaintext)
+    except json.JSONDecodeError:
+        return {"token": plaintext}

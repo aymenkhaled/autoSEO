@@ -281,6 +281,25 @@ export default function IssuesPage() {
                     </div>
                   </div>
                 )}
+
+                {group.fix_workflow && (
+                  <div className="rounded-lg border border-border bg-background px-3 py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold text-foreground">Fix workflow</p>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        {group.fix_workflow.can_create_github_pr ? 'GitHub PR ready' : 'Setup needed'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{group.fix_workflow.truth_note}</p>
+                    {group.fix_workflow.missing_requirements?.length > 0 && (
+                      <div className="space-y-1">
+                        {group.fix_workflow.missing_requirements.map((item: string) => (
+                          <p key={item} className="text-[11px] text-amber-300">{item}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </motion.article>
             ))}
           </div>

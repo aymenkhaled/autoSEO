@@ -80,6 +80,8 @@ export const issuesApi = {
     api.get('issues', { searchParams: params }).json<any>(),
   aggregated: (params: Record<string, any> = {}) =>
     api.get('issues/aggregated', { searchParams: params }).json<any>(),
+  rootCauseFix: (data: { site_id: string; issue_type: string; mode?: 'plan' | 'github_pr' }) =>
+    api.post('issues/root-cause-fix', { json: data }).json<any>(),
   get: (id: string) => api.get(`issues/${id}`).json<any>(),
 }
 
@@ -112,6 +114,9 @@ export interface ConnectionPayload {
   repo?: string
   github_token?: string
   branch?: string
+  project_root?: string
+  build_command?: string
+  package_manager?: string
 }
 
 export const connectionsApi = {

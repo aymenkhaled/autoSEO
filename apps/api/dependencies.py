@@ -77,6 +77,9 @@ def _required_scope_for_request(method: str, path: str) -> str | None:
     if path.startswith(("/sites", "/crawls", "/snippet", "/keywords", "/competitors", "/webhooks")):
         return "read:sites" if method == "GET" else "write:sites"
 
+    if path == "/issues/root-cause-fix" and method == "POST":
+        return "write:fixes"
+
     if path.startswith("/issues") or path.startswith("/change-log"):
         return "read:issues"
 

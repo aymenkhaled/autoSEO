@@ -47,6 +47,10 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
+.pytest-packages/
+.runtime-packages/
+runtime_packages/
+.test-packages/
 
 # Alembic
 apps/api/alembic/versions/*.pyc
