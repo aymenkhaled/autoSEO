@@ -147,8 +147,8 @@ CONNECTION_CAPABILITY_SUMMARY: Final[dict[str, dict[str, object]]] = {
     "github": {
         "label": "GitHub",
         "mode": "pr_or_repo_update",
-        "description": "Uses repository access for file-based sites. Fixes should be reviewed through a PR-style workflow before going live.",
-        "required_credentials": ["owner", "repo", "github_token", "branch"],
+        "description": "Uses repo-limited access for file-based sites. AutoSEO creates reviewable PRs; it does not silently push to production.",
+        "required_credentials": ["GitHub App installation or fine-grained token", "owner", "repo", "branch"],
     },
 }
 

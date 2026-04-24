@@ -80,7 +80,7 @@ export const issuesApi = {
     api.get('issues', { searchParams: params }).json<any>(),
   aggregated: (params: Record<string, any> = {}) =>
     api.get('issues/aggregated', { searchParams: params }).json<any>(),
-  rootCauseFix: (data: { site_id: string; issue_type: string; mode?: 'plan' | 'github_pr' }) =>
+  rootCauseFix: (data: { site_id: string; issue_type: string; mode?: 'plan' | 'ai_preview' | 'github_pr'; business_context?: Record<string, any> }) =>
     api.post('issues/root-cause-fix', { json: data }).json<any>(),
   get: (id: string) => api.get(`issues/${id}`).json<any>(),
 }
@@ -130,6 +130,23 @@ export const connectionsApi = {
     api.put(`sites/${siteId}/connection`, { json: payload }).json<any>(),
   remove: (siteId: string) =>
     api.delete(`sites/${siteId}/connection`),
+}
+
+export const githubApi = {
+  installUrl: (siteId: string) =>
+    api.get('github/app/install-url', { searchParams: { site_id: siteId } }).json<any>(),
+  completeInstall: (data: {
+    site_id: string
+    installation_id: number
+    owner: string
+    repo: string
+    branch?: string
+    project_root?: string
+    build_command?: string
+    package_manager?: string
+  }) => api.post('github/app/complete-install', { json: data }).json<any>(),
+  repoAnalysis: (siteId: string) =>
+    api.get(`sites/${siteId}/github/repo-analysis`).json<any>(),
 }
 
 export const snippetApi = {

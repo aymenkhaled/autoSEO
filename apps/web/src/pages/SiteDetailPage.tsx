@@ -240,6 +240,15 @@ export default function SiteDetailPage() {
     onError: (error: any) => toast.error(error?.message || 'Fix workflow could not be loaded'),
   })
 
+  const previewAiFix = useMutation({
+    mutationFn: (group: any) => issuesApi.rootCauseFix({ site_id: id!, issue_type: group.type, mode: 'ai_preview' }),
+    onSuccess: (result) => setWorkflowPanel(result),
+    onError: async (error: any) => {
+      const detail = error?.response ? await error.response.json().catch(() => null) : null
+      toast.error(detail?.detail?.message || detail?.detail || error?.message || 'AI preview could not be created')
+    },
+  })
+
   const createGithubPr = useMutation({
     mutationFn: (group: any) => issuesApi.rootCauseFix({ site_id: id!, issue_type: group.type, mode: 'github_pr' }),
     onSuccess: (result) => {
@@ -661,6 +670,16 @@ export default function SiteDetailPage() {
                             </div>
                             <TinyPill label={group.fix_workflow.can_create_github_pr ? 'GitHub PR ready' : 'Needs setup'} />
                           </div>
+                          <div className="grid sm:grid-cols-2 gap-2">
+                            <TinyPill
+                              label={group.fix_workflow.ai_configured ? 'AI ready' : 'AI key required'}
+                              className={group.fix_workflow.ai_configured ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-slate-500/10 text-slate-300 border-slate-500/20'}
+                            />
+                            <TinyPill
+                              label={`Permission: ${connection?.permission_level || 'audit_only'}`}
+                              className={connection?.permission_level === 'pr_only' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-muted text-muted-foreground border-border'}
+                            />
+                          </div>
                           {group.fix_workflow.missing_requirements?.length > 0 && (
                             <ul className="space-y-1">
                               {group.fix_workflow.missing_requirements.map((item: string) => (
@@ -676,6 +695,15 @@ export default function SiteDetailPage() {
                             >
                               View exact fix steps
                             </button>
+                            {group.fix_workflow.can_preview_ai && (
+                              <button
+                                onClick={() => previewAiFix.mutate(group)}
+                                disabled={previewAiFix.isPending}
+                                className="h-8 px-3 rounded-lg border border-cyan-500/30 text-xs text-cyan-300 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
+                              >
+                                {previewAiFix.isPending ? 'Planning...' : 'Preview AI fix'}
+                              </button>
+                            )}
                             {group.fix_workflow.can_create_github_pr && (
                               <button
                                 onClick={() => createGithubPr.mutate(group)}
@@ -716,6 +744,46 @@ export default function SiteDetailPage() {
                   <a href={workflowPanel.github.pr_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs text-primary hover:underline">
                     Open GitHub PR <ExternalLink className="h-3 w-3" />
                   </a>
+                )}
+                {workflowPanel.ai_preview && (
+                  <div className="rounded-lg border border-border bg-background p-4 space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <TinyPill label={`Mode: ${workflowPanel.ai_preview.mode}`} />
+                      <TinyPill label={`Risk: ${workflowPanel.ai_preview.risk_level}`} />
+                      <TinyPill label={workflowPanel.ai_preview.safety?.ok ? 'Safety passed' : 'Safety blocked'} className={workflowPanel.ai_preview.safety?.ok ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{workflowPanel.ai_preview.patch_summary || workflowPanel.ai_preview.summary}</p>
+                    {workflowPanel.ai_preview.proposed_files_to_change?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-foreground mb-1">Files AutoSEO wants to change</p>
+                        <ul className="space-y-1">
+                          {workflowPanel.ai_preview.proposed_files_to_change.map((path: string) => (
+                            <li key={path} className="text-xs text-muted-foreground font-mono">{path}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {workflowPanel.ai_preview.missing_user_data?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-foreground mb-1">Missing user data before this is safe</p>
+                        <ul className="space-y-1">
+                          {workflowPanel.ai_preview.missing_user_data.map((item: string) => (
+                            <li key={item} className="text-xs text-amber-300">{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {workflowPanel.ai_preview.safety?.errors?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-red-300 mb-1">Safety errors</p>
+                        <ul className="space-y-1">
+                          {workflowPanel.ai_preview.safety.errors.map((item: string) => (
+                            <li key={item} className="text-xs text-red-300">{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

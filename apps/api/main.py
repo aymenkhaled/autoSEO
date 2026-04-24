@@ -133,6 +133,7 @@ from routers.usage import router as usage_router
 from routers.change_log import router as change_log_router
 from routers.reports import router as reports_router
 from routers.system import router as system_router
+from routers.github import router as github_router
 
 _ROUTERS = [
     (auth_router, "/auth"),
@@ -154,6 +155,7 @@ _ROUTERS = [
     (change_log_router, "/change-log"),
     (reports_router, "/reports"),
     (system_router, "/system"),
+    (github_router, ""),
 ]
 
 for base_prefix in ("", "/api", "/api/v1"):

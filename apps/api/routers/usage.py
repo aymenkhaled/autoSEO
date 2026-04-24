@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from models.tables import Crawl, Issue, Site, AiUsage, Organization
-from packages.shared.seo_domain import FIX_STATUS_DEPLOYED
+from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE
 
 router = APIRouter(tags=["usage"])
 
@@ -46,7 +46,7 @@ async def get_usage(
     fixes_this_month = (await db.execute(
         select(func.count(Issue.id)).where(
             Issue.org_id == auth.org_id,
-            Issue.fix_status.in_([FIX_STATUS_DEPLOYED, "applied"]),
+            Issue.fix_status.in_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, "applied"]),
             Issue.applied_at >= month_start,
         )
     )).scalar() or 0

@@ -222,7 +222,11 @@ async def _async_crawl(site_id: str, crawl_id: str):
     from models.tables import Crawl, Issue, Page, Site
     from packages.crawler.url_utils import dedupe_urls, is_safe_url
     from packages.shared.db_lock import advisory_lock
-    from packages.shared.seo_domain import normalize_issue_type
+    from packages.shared.seo_domain import (
+        FIX_STATUS_DEPLOYED_AFTER_MERGE,
+        FIX_STATUS_GITHUB_PR_CREATED,
+        normalize_issue_type,
+    )
 
     settings = get_settings()
     engine = create_async_engine(settings.DATABASE_URL)
@@ -621,9 +625,47 @@ async def _async_crawl(site_id: str, crawl_id: str):
                         else 0
                     )
 
+                    current_issue_types = {issue_data["type"] for issue_data in deduped_issues}
+                    prior_pr_issues = (
+                        await db.execute(
+                            select(Issue).where(
+                                Issue.site_id == site_id,
+                                Issue.org_id == site.org_id,
+                                Issue.fix_status == FIX_STATUS_GITHUB_PR_CREATED,
+                            )
+                        )
+                    ).scalars().all()
+                    verified_after_pr = 0
+                    for prior_issue in prior_pr_issues:
+                        metadata = dict(prior_issue.proposed_fix_metadata or {})
+                        if prior_issue.type in current_issue_types:
+                            metadata["recrawl_verification_status"] = "still_detected"
+                            metadata["last_checked_crawl_id"] = crawl_id
+                            prior_issue.proposed_fix_metadata = metadata
+                        else:
+                            prior_issue.fix_status = FIX_STATUS_DEPLOYED_AFTER_MERGE
+                            prior_issue.applied_at = datetime.now(timezone.utc)
+                            metadata["recrawl_verification_status"] = "verified_removed"
+                            metadata["verified_crawl_id"] = crawl_id
+                            prior_issue.proposed_fix_metadata = metadata
+                            verified_after_pr += 1
+
                     site.status = "active" if getattr(site, "ownership_verified", False) else "pending_verification"
                     site.last_crawled_at = datetime.now(timezone.utc)
                     from packages.shared.notifications import notify_org_users
+                    if verified_after_pr:
+                        await notify_org_users(
+                            db,
+                            site.org_id,
+                            notification_type="fix.deployed",
+                            title=f"{verified_after_pr} PR fixes verified for {site.name}",
+                            body="A recrawl confirmed previously opened GitHub PR issues are no longer detected.",
+                            data={
+                                "site_id": site_id,
+                                "crawl_id": crawl_id,
+                                "verified_count": verified_after_pr,
+                            },
+                        )
                     await notify_org_users(
                         db,
                         site.org_id,
@@ -660,6 +702,19 @@ async def _async_crawl(site_id: str, crawl_id: str):
                                 "seo_score": site_score,
                             },
                         )
+                        if verified_after_pr:
+                            await emit_outbound_webhooks(
+                                db,
+                                site.org_id,
+                                "fix.deployed",
+                                {
+                                    "site_id": site_id,
+                                    "site_name": site.name,
+                                    "crawl_id": crawl_id,
+                                    "verified_count": verified_after_pr,
+                                    "verification": "recrawl_removed_issue_type",
+                                },
+                            )
                     except Exception as exc:
                         logger.debug("crawl_webhook_fanout_failed", error=str(exc))
 

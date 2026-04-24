@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 
 import { useSites } from '@/hooks/use-data'
 import { connectionSummary } from '@/lib/readiness'
-import { connectionsApi, webhooksApi, type ConnectionPayload, type ConnectionType } from '@/lib/api-client'
+import { connectionsApi, githubApi, webhooksApi, type ConnectionPayload, type ConnectionType } from '@/lib/api-client'
 
 const CONNECTION_FIELDS: Record<ConnectionType, Array<{ key: keyof ConnectionPayload; label: string; placeholder?: string; secret?: boolean }>> = {
   crawler: [],
@@ -43,10 +43,23 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
     branch: site.github_branch || 'main',
   })
   const [testResult, setTestResult] = useState<any>(null)
+  const [githubInstallationId, setGithubInstallationId] = useState('')
 
   const capabilitiesQuery = useQuery({
     queryKey: ['connection-capabilities', site.id],
     queryFn: () => connectionsApi.capabilities(site.id),
+  })
+
+  const githubInstallQuery = useQuery({
+    queryKey: ['github-install-url', site.id],
+    queryFn: () => githubApi.installUrl(site.id),
+    enabled: form.connection_type === 'github',
+  })
+
+  const repoAnalysis = useMutation({
+    mutationFn: () => githubApi.repoAnalysis(site.id),
+    onSuccess: () => toast.success('Repository analysis loaded'),
+    onError: (error: any) => toast.error(error?.message || 'Repository analysis failed'),
   })
 
   const testConnection = useMutation({
@@ -69,6 +82,30 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
     },
     onError: async (error: any) => {
       toast.error(error?.message || 'Connection could not be saved')
+    },
+  })
+
+  const completeGithubApp = useMutation({
+    mutationFn: () => githubApi.completeInstall({
+      site_id: site.id,
+      installation_id: Number(githubInstallationId),
+      owner: form.owner || '',
+      repo: form.repo || '',
+      branch: form.branch || 'main',
+      project_root: form.project_root || '',
+      build_command: form.build_command,
+      package_manager: form.package_manager,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sites'] })
+      queryClient.invalidateQueries({ queryKey: ['site-connection', site.id] })
+      queryClient.invalidateQueries({ queryKey: ['site-summary', site.id] })
+      toast.success('GitHub App connection saved')
+      onClose()
+    },
+    onError: async (error: any) => {
+      const detail = error?.response ? await error.response.json().catch(() => null) : null
+      toast.error(detail?.detail || error?.message || 'GitHub App connection could not be saved')
     },
   })
 
@@ -130,6 +167,57 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
             </div>
           )}
 
+          {form.connection_type === 'github' && (
+            <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Recommended: GitHub App PR-only access</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Install the AutoSEO GitHub App on one selected repo. AutoSEO creates branches and PRs; it does not push to main or deploy silently.
+                </p>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground block mb-1.5">Installation ID</label>
+                  <input
+                    value={githubInstallationId}
+                    onChange={(event) => setGithubInstallationId(event.target.value)}
+                    placeholder="Returned by GitHub after install"
+                    className="w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground"
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <a
+                    href={githubInstallQuery.data?.install_url || undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex-1 inline-flex items-center justify-center h-10 rounded-lg border border-border text-xs font-semibold transition-colors ${
+                      githubInstallQuery.data?.install_url ? 'text-foreground hover:bg-muted' : 'text-muted-foreground pointer-events-none opacity-60'
+                    }`}
+                  >
+                    Install GitHub App
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => completeGithubApp.mutate()}
+                    disabled={completeGithubApp.isPending || needsVerification || !githubInstallationId || !form.owner || !form.repo}
+                    className="flex-1 h-10 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    {completeGithubApp.isPending ? 'Saving...' : 'Complete app setup'}
+                  </button>
+                </div>
+              </div>
+              {githubInstallQuery.data && !githubInstallQuery.data.configured && (
+                <p className="text-xs text-amber-300">{githubInstallQuery.data.message}</p>
+              )}
+              <div className="rounded-lg border border-border bg-background p-3">
+                <p className="text-xs font-semibold text-foreground">Advanced fallback</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  If the GitHub App is not configured yet, use a fine-grained token limited to one repo with Contents and Pull Requests read/write.
+                </p>
+              </div>
+            </div>
+          )}
+
           {fields.length > 0 && (
             <div className="grid sm:grid-cols-2 gap-3">
               {fields.map(field => (
@@ -172,11 +260,25 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
             </div>
           )}
 
+          {repoAnalysis.data && (
+            <div className="rounded-lg border border-border bg-background p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">Repo analysis: {repoAnalysis.data.analysis?.framework || 'unknown'}</p>
+              <p>Project root: {repoAnalysis.data.analysis?.project_root || '.'}</p>
+              <p>Candidate files: {(repoAnalysis.data.candidate_files ?? []).slice(0, 5).map((item: any) => item.path).join(', ') || 'none found'}</p>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button onClick={() => testConnection.mutate(form)} disabled={testConnection.isPending}
               className="flex-1 h-10 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50">
               {testConnection.isPending ? 'Testing...' : 'Test connection'}
             </button>
+            {form.connection_type === 'github' && (
+              <button onClick={() => repoAnalysis.mutate()} disabled={repoAnalysis.isPending}
+                className="flex-1 h-10 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+                {repoAnalysis.isPending ? 'Analyzing...' : 'Analyze repo'}
+              </button>
+            )}
             <button onClick={() => saveConnection.mutate({ ...form, sandbox: false })} disabled={saveConnection.isPending || form.sandbox || needsVerification}
               className="flex-1 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
               {saveConnection.isPending ? 'Saving...' : 'Save real connection'}

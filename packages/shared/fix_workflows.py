@@ -117,12 +117,20 @@ def build_root_cause_workflow(
     connection: dict | None,
     ownership_verified: bool,
     examples: list[dict] | None = None,
+    ai_configured: bool = False,
 ) -> dict[str, Any]:
     recipe = {**DEFAULT_RECIPE, **FIX_RECIPES.get(issue_type, {})}
     write_integration = (connection or {}).get("write_integration")
     write_configured = bool((connection or {}).get("write_integration_configured"))
     github_possible = issue_type in GITHUB_STATIC_APP_ISSUES
-    can_create_pr = bool(github_possible and write_integration == "github" and write_configured and ownership_verified)
+    deterministic_pr = recipe["github_strategy"] == "safe_file_patch"
+    can_create_pr = bool(
+        github_possible
+        and write_integration == "github"
+        and write_configured
+        and ownership_verified
+        and (deterministic_pr or ai_configured)
+    )
 
     missing: list[str] = []
     if github_possible and write_integration != "github":
@@ -131,6 +139,8 @@ def build_root_cause_workflow(
         missing.append("Save and test real GitHub repository credentials.")
     if github_possible and not ownership_verified:
         missing.append("Verify site ownership before AutoSEO can create deployment PRs.")
+    if github_possible and not ai_configured and recipe["github_strategy"] == "plan_only":
+        missing.append("Configure ANTHROPIC_API_KEY for deep AI code patches. Deterministic robots/sitemap PRs can still work without AI.")
 
     status = (
         FIX_STATUS_GITHUB_PR_READY
@@ -145,6 +155,8 @@ def build_root_cause_workflow(
         "required_fix_type": recipe["required_fix_type"],
         "github_strategy": recipe["github_strategy"],
         "can_create_github_pr": can_create_pr,
+        "can_preview_ai": bool(github_possible and write_integration == "github" and write_configured and ownership_verified and ai_configured),
+        "ai_configured": bool(ai_configured),
         "missing_requirements": missing,
         "affected_count": count,
         "examples": examples or [],

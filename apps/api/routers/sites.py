@@ -31,7 +31,7 @@ from models.tables import (
 )
 from packages.crawler.url_utils import is_safe_url
 from packages.shared.readiness import connection_status_payload, site_setup_payload
-from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, FIX_STATUS_ROLLED_BACK
+from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK
 
 router = APIRouter(tags=["sites"])
 
@@ -243,7 +243,7 @@ async def get_site_summary(
                 select(func.count(Issue.id)).where(
                     Issue.site_id == site_id,
                     Issue.org_id == auth.org_id,
-                    Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_ROLLED_BACK, "applied"]),
+                    Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK, "applied"]),
                 )
             )
         ).scalar()
@@ -255,7 +255,7 @@ async def get_site_summary(
                 select(func.count(Issue.id)).where(
                     Issue.site_id == site_id,
                     Issue.org_id == auth.org_id,
-                    Issue.fix_status.in_([FIX_STATUS_DEPLOYED, "applied"]),
+                    Issue.fix_status.in_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, "applied"]),
                 )
             )
         ).scalar()

@@ -92,6 +92,8 @@ class Settings(BaseSettings):
     # --- GitHub App ---
     GITHUB_APP_ID: str = ""
     GITHUB_APP_PRIVATE_KEY: str = ""
+    GITHUB_APP_SLUG: str = ""
+    GITHUB_WEBHOOK_SECRET: str = ""
 
     # --- App ---
     FRONTEND_URL: str = "http://localhost:5173"

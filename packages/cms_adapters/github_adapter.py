@@ -166,6 +166,114 @@ class GitHubAdapter(BaseCMSAdapter):
                 ],
             }
 
+    async def repository_tree(self, project_root: str | None = None) -> list[dict]:
+        """Return repository blob paths under the configured project root."""
+        root = (project_root if project_root is not None else self.project_root).strip().strip("/")
+        prefix = f"{root}/" if root else ""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/git/trees/{self.branch}",
+                params={"recursive": "1"},
+                headers=self._headers(),
+            )
+        if response.status_code != 200:
+            raise ValueError(f"Could not list repository tree: {response.status_code}")
+        out: list[dict] = []
+        for item in response.json().get("tree", []):
+            if item.get("type") != "blob":
+                continue
+            path = item.get("path", "")
+            if prefix and not path.startswith(prefix):
+                continue
+            out.append({
+                "path": path,
+                "size": item.get("size") or 0,
+                "sha": item.get("sha"),
+            })
+        return out
+
+    async def candidate_files_for_issue(
+        self,
+        issue_type: str,
+        *,
+        project_root: str | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Pick small, likely-relevant files for AI patch planning."""
+        tree = await self.repository_tree(project_root)
+        preferred_names = {
+            "index.html",
+            "package.json",
+            "src/App.tsx",
+            "src/App.jsx",
+            "src/main.tsx",
+            "src/main.jsx",
+            "src/routes.tsx",
+            "src/routes.jsx",
+            "app/layout.tsx",
+            "app/page.tsx",
+            "pages/_app.tsx",
+            "pages/_document.tsx",
+        }
+        keywords = {
+            "spa_no_prerender": ("vite", "next", "astro", "remix", "router", "routes", "helmet", "metadata", "seo"),
+            "duplicate_title": ("title", "metadata", "seo", "helmet", "routes", "router", "app", "layout"),
+            "stale_schema_date": ("schema", "jsonld", "json-ld", "structured", "pricing", "offer"),
+            "unverified_review_schema": ("review", "rating", "testimonial", "schema", "jsonld", "json-ld"),
+            "missing_offer_schema": ("pricing", "offer", "schema", "jsonld", "json-ld", "product"),
+            "broken_og_image": ("og", "open-graph", "opengraph", "metadata", "seo", "image"),
+        }.get(issue_type, ("seo", "metadata", "routes", "app"))
+        allowed_suffixes = (
+            ".astro", ".html", ".js", ".jsx", ".json", ".md", ".mdx", ".mjs",
+            ".ts", ".tsx",
+        )
+
+        scored: list[tuple[int, dict]] = []
+        root = (project_root if project_root is not None else self.project_root).strip().strip("/")
+        prefix = f"{root}/" if root else ""
+        for item in tree:
+            path = item["path"]
+            lower = path.lower()
+            if item.get("size", 0) > 70000 or not lower.endswith(allowed_suffixes):
+                continue
+            score = 0
+            rel = path[len(prefix):] if prefix and path.startswith(prefix) else path
+            if rel in preferred_names:
+                score += 40
+            if lower.endswith(("vite.config.ts", "vite.config.js", "next.config.js", "next.config.ts", "astro.config.mjs", "astro.config.ts")):
+                score += 20
+            score += sum(12 for keyword in keywords if keyword in lower)
+            if "/src/" in f"/{lower}" or lower.startswith("src/"):
+                score += 5
+            if score > 0:
+                scored.append((score, item))
+
+        scored.sort(key=lambda pair: (-pair[0], pair[1]["path"]))
+        return [item for _score, item in scored[:limit]]
+
+    async def read_text_files(self, paths: list[str], *, ref: str | None = None, max_chars: int = 70000) -> list[dict]:
+        """Read text file contents from GitHub for AI context."""
+        out: list[dict] = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for path in paths:
+                response = await client.get(
+                    f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{path}",
+                    params={"ref": ref or self.branch},
+                    headers=self._headers(),
+                )
+                if response.status_code != 200:
+                    continue
+                data = response.json()
+                if data.get("encoding") != "base64" or data.get("type") != "file":
+                    continue
+                content = base64.b64decode(data.get("content", "")).decode("utf-8", errors="replace")
+                out.append({
+                    "path": path,
+                    "sha": data.get("sha"),
+                    "content": content[:max_chars],
+                })
+        return out
+
     async def list_pages(self, limit: int = 500) -> list[CMSPage]:
         """List markdown/MDX files that likely contain SEO metadata."""
         pages: list[CMSPage] = []
@@ -435,6 +543,121 @@ class GitHubAdapter(BaseCMSAdapter):
                 "repo_analysis": analysis,
             }
 
+    async def create_ai_patch_pr(
+        self,
+        *,
+        issue_type: str,
+        title: str,
+        site_domain: str,
+        affected_urls: list[str],
+        preview: dict,
+        project_root: str = "",
+    ) -> dict:
+        """Create a PR from a validated AI preview."""
+        from packages.shared.patch_safety import validate_file_changes
+
+        root = (project_root or self.project_root).strip().strip("/")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        branch = f"autoseo/ai-{issue_type.replace('_', '-')}-{timestamp}"
+        changes = preview.get("file_changes") or []
+        safety = validate_file_changes(changes, project_root=root)
+        mode = "file_patch" if safety.ok and safety.sanitized_changes else "plan_only"
+        if mode == "plan_only":
+            safety_note = "\n".join(f"- {item}" for item in (safety.errors or preview.get("review_notes") or []))
+            changes = [
+                {
+                    "path": self._rooted_path(root, f"autoseo-fix-plans/{issue_type}-{timestamp}.md"),
+                    "action": "create",
+                    "summary": "AI fix plan",
+                    "content": self._ai_plan_markdown(
+                        issue_type=issue_type,
+                        title=title,
+                        site_domain=site_domain,
+                        affected_urls=affected_urls,
+                        preview=preview,
+                        safety_note=safety_note,
+                    ),
+                }
+            ]
+            safety = validate_file_changes(changes, project_root="")
+            if not safety.ok:
+                return {"success": False, "message": "AI plan failed safety validation", "safety": safety.__dict__}
+
+        draft = preview.get("risk_level") == "high" or mode == "plan_only"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            base_resp = await client.get(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/git/ref/heads/{self.branch}",
+                headers=self._headers(),
+            )
+            if base_resp.status_code != 200:
+                return {"success": False, "message": "Could not get base branch SHA", "status_code": base_resp.status_code}
+            base_sha = base_resp.json()["object"]["sha"]
+            branch_resp = await client.post(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/git/refs",
+                json={"ref": f"refs/heads/{branch}", "sha": base_sha},
+                headers=self._headers(),
+            )
+            if branch_resp.status_code not in (201, 422):
+                return {"success": False, "message": f"Could not create branch: {branch_resp.text[:200]}", "status_code": branch_resp.status_code}
+
+            committed_paths: list[str] = []
+            for change in safety.sanitized_changes:
+                path = change["path"]
+                existing_sha = await self._file_sha(client, path, branch)
+                payload = {
+                    "message": f"fix(seo): {change['summary']}",
+                    "content": base64.b64encode(change["content"].encode("utf-8")).decode("ascii"),
+                    "branch": branch,
+                }
+                if existing_sha:
+                    payload["sha"] = existing_sha
+                commit_resp = await client.put(
+                    f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{path}",
+                    json=payload,
+                    headers=self._headers(),
+                )
+                if commit_resp.status_code not in (200, 201):
+                    return {"success": False, "message": f"Commit failed for {path}: {commit_resp.text[:200]}", "status_code": commit_resp.status_code}
+                committed_paths.append(path)
+
+            pr_resp = await client.post(
+                f"{GH_API}/repos/{self.owner}/{self.repo}/pulls",
+                json={
+                    "title": f"AutoSEO AI: {title}",
+                    "head": branch,
+                    "base": self.branch,
+                    "draft": draft,
+                    "body": self._ai_pr_body(
+                        issue_type=issue_type,
+                        title=title,
+                        site_domain=site_domain,
+                        affected_urls=affected_urls,
+                        preview=preview,
+                        mode=mode,
+                        files=committed_paths,
+                    ),
+                },
+                headers=self._headers(),
+            )
+            if pr_resp.status_code != 201:
+                return {"success": False, "message": f"PR creation failed: {pr_resp.text[:200]}", "status_code": pr_resp.status_code}
+
+            data = pr_resp.json()
+            return {
+                "success": True,
+                "mode": mode,
+                "message": "GitHub PR created from AI preview",
+                "pr_url": data.get("html_url"),
+                "pr_number": data.get("number"),
+                "branch": branch,
+                "draft": draft,
+                "files_changed": committed_paths,
+                "risk_level": preview.get("risk_level"),
+                "ai_model": preview.get("ai_model"),
+                "safety": safety.__dict__,
+            }
+
     async def _file_sha(self, client: httpx.AsyncClient, path: str, branch: str) -> str | None:
         resp = await client.get(
             f"{GH_API}/repos/{self.owner}/{self.repo}/contents/{path}",
@@ -541,6 +764,72 @@ class GitHubAdapter(BaseCMSAdapter):
             "### What to review\n"
             f"{steps}\n\n"
             "After merging and deploying, run a new AutoSEO crawl to verify the grouped issue count drops.\n"
+        )
+
+    def _ai_plan_markdown(
+        self,
+        *,
+        issue_type: str,
+        title: str,
+        site_domain: str,
+        affected_urls: list[str],
+        preview: dict,
+        safety_note: str,
+    ) -> str:
+        affected = "\n".join(f"- {url}" for url in _clean_urls(affected_urls)[:25]) or "- Site-wide issue"
+        notes = "\n".join(f"- {note}" for note in preview.get("review_notes", [])) or "- Review the plan before making source changes."
+        missing = "\n".join(f"- {item}" for item in preview.get("missing_user_data", [])) or "- None"
+        return (
+            f"# AutoSEO AI Fix Plan: {title}\n\n"
+            f"- Issue type: `{issue_type}`\n"
+            f"- Site: {site_domain}\n"
+            f"- Risk level: `{preview.get('risk_level', 'high')}`\n"
+            f"- Mode: `plan_only`\n\n"
+            "## Summary\n"
+            f"{preview.get('patch_summary') or preview.get('summary') or 'Review and implement this root-cause fix.'}\n\n"
+            "## Affected URLs\n"
+            f"{affected}\n\n"
+            "## Missing user data\n"
+            f"{missing}\n\n"
+            "## Review notes\n"
+            f"{notes}\n\n"
+            "## Safety notes\n"
+            f"{safety_note or '- No blocking safety issues.'}\n"
+        )
+
+    def _ai_pr_body(
+        self,
+        *,
+        issue_type: str,
+        title: str,
+        site_domain: str,
+        affected_urls: list[str],
+        preview: dict,
+        mode: str,
+        files: list[str],
+    ) -> str:
+        affected = "\n".join(f"- {url}" for url in _clean_urls(affected_urls)[:25]) or "- Site-wide issue"
+        changed = "\n".join(f"- `{path}`" for path in files) or "- No source files changed"
+        notes = "\n".join(f"- {note}" for note in preview.get("review_notes", [])) or "- Review the diff, deploy, then re-crawl."
+        missing = "\n".join(f"- {item}" for item in preview.get("missing_user_data", [])) or "- None"
+        return (
+            "## AutoSEO AI root-cause fix\n\n"
+            f"**Issue:** `{issue_type}` - {title}\n"
+            f"**Site:** {site_domain}\n"
+            f"**Mode:** `{mode}`\n"
+            f"**Risk:** `{preview.get('risk_level', 'unknown')}`\n"
+            f"**AI model:** `{preview.get('ai_model') or 'not used'}`\n\n"
+            "### Patch summary\n"
+            f"{preview.get('patch_summary') or preview.get('summary') or 'No summary returned.'}\n\n"
+            "### Files changed\n"
+            f"{changed}\n\n"
+            "### Affected URLs\n"
+            f"{affected}\n\n"
+            "### Missing user data\n"
+            f"{missing}\n\n"
+            "### Review notes\n"
+            f"{notes}\n\n"
+            "Merge only after reviewing the diff. After deployment, run a new AutoSEO crawl; AutoSEO should mark this fixed only after the issue disappears.\n"
         )
 
 

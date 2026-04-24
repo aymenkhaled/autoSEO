@@ -58,6 +58,13 @@ FRONTEND_URL=http://127.0.0.1:5000
 API_URL=http://127.0.0.1:8000
 ENVIRONMENT=development
 DEBUG=true
+
+# Optional but required for AI-powered GitHub PR fixes
+ANTHROPIC_API_KEY=
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+GITHUB_APP_SLUG=
+GITHUB_WEBHOOK_SECRET=
 ```
 
 Frontend `apps/web/.env.local`:
@@ -118,6 +125,17 @@ Open [http://127.0.0.1:8001](http://127.0.0.1:8001).
 8. Open `Fixes` and confirm AI readiness is truthful if Anthropic is not configured.
 9. Open `Reports`, `Team`, and `Billing` and confirm readiness states are honest.
 10. Create an API key and call the API from the examples shown in the UI.
+
+### AI-powered GitHub PR flow
+
+1. Add a site and run a crawl.
+2. Open the site `Audit` tab and review grouped root causes.
+3. Generate the ownership verification meta tag, add it to the site's `<head>`, deploy once, then click `Check Verification`.
+4. Open `Integrations`, choose the site, and select `GitHub`.
+5. Preferred SaaS path: install the AutoSEO GitHub App on one selected repo, paste the installation ID plus owner/repo/branch/project root/build command, then complete setup.
+6. Advanced fallback: use a fine-grained GitHub token limited to one repo with Contents and Pull Requests read/write.
+7. Return to the site `Audit` tab, click `Preview AI fix`, review risk/files/missing data, then click `Create GitHub PR`.
+8. Review and merge the PR in GitHub, deploy the site, then crawl again. AutoSEO should treat the fix as proven only after the recrawl removes the issue group.
 
 ### Verification commands
 

@@ -30,6 +30,7 @@ from models.tables import (
     User,
 )
 from packages.shared.notifications import notify_org_users
+from packages.shared.patch_safety import validate_file_changes
 from routers.auth import create_access_token
 from workers.tasks.fix import _run_ai_analysis_async
 
@@ -81,6 +82,7 @@ def test_system_readiness_uses_local_auth_without_supabase():
     assert payload["providers"]["anthropic"] is False
     assert payload["webhook_delivery_available"] is True
     assert payload["features"]["billing"]["state"] in {"saved_only", "setup_required"}
+    assert payload["providers"]["github_app"] is False
 
 
 def test_register_login_defaults_new_org_to_free_plan():
@@ -383,9 +385,53 @@ def test_root_cause_workflow_reports_missing_github_requirements():
     assert response.status_code == 200, response.text
     workflow = response.json()["fix_workflow"]
     assert workflow["can_create_github_pr"] is False
+    assert workflow["can_preview_ai"] is False
     assert any("GitHub" in item for item in workflow["missing_requirements"])
     assert any("Verify" in item for item in workflow["missing_requirements"])
     assert workflow["manual_steps"]
+
+
+def test_github_app_install_url_reports_missing_platform_config():
+    user, org = run(seed_user())
+
+    async def seed_site():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="App Site", domain="https://app-site.test")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site())
+    response = run(api_request(
+        "GET",
+        f"/api/v1/github/app/install-url?site_id={site_id}",
+        headers=auth_headers(user),
+    ))
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["configured"] is False
+    assert payload["install_url"] is None
+    assert payload["requires_verification"] is True
+
+
+def test_patch_safety_blocks_secret_and_lockfile_changes():
+    result = validate_file_changes([
+        {
+            "path": "package-lock.json",
+            "action": "update",
+            "summary": "Do not touch lockfile",
+            "content": "{}",
+        },
+        {
+            "path": "src/seo.ts",
+            "action": "update",
+            "summary": "Bad secret",
+            "content": "export const token = 'ghp_secret';",
+        },
+    ])
+    assert result.ok is False
+    assert any("protected file" in error for error in result.errors)
+    assert any("token-looking" in error for error in result.errors)
 
 
 def test_api_key_root_cause_fix_requires_write_fixes_scope():

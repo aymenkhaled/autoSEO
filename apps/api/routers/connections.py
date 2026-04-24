@@ -30,6 +30,7 @@ from packages.shared.encryption import encrypt_credential
 from packages.shared.readiness import connection_status_payload
 from packages.shared.seo_domain import CONNECTION_CAPABILITY_SUMMARY, connection_capabilities
 from config import get_settings
+from services.github_connection import github_connection_metadata
 
 router = APIRouter(tags=["connections"])
 settings = get_settings()
@@ -81,7 +82,9 @@ def _persistable_creds(creds: ConnectionCredentials) -> dict:
     if ct == "github":
         return {
             "owner": creds.owner, "repo": creds.repo,
-            "token": creds.github_token, "branch": creds.branch or "main",
+            "token": creds.github_token,
+            "access_method": "fine_grained_token",
+            "branch": creds.branch or "main",
             "project_root": creds.project_root or "",
             "build_command": creds.build_command,
             "package_manager": creds.package_manager,
@@ -97,9 +100,17 @@ async def _get_site(db: AsyncSession, site_id: UUID, org_id) -> Site:
     return site
 
 
-def _status_response(site: Site) -> ConnectionStatusResponse:
+def _status_response(site: Site, org_id=None) -> ConnectionStatusResponse:
     snippet_token = str(site.snippet_token) if site.snippet_token else None
     payload = connection_status_payload(site)
+    github_meta = github_connection_metadata(str(org_id), site) if org_id and site.connection_type == "github" else {
+        "access_method": "none",
+        "permission_level": "audit_only",
+        "selected_repository": None,
+        "project_root": "",
+        "build_command": None,
+        "package_manager": None,
+    }
     return ConnectionStatusResponse(
         connection_type=site.connection_type,  # type: ignore[arg-type]
         configured=payload["configured"],
@@ -115,6 +126,12 @@ def _status_response(site: Site) -> ConnectionStatusResponse:
         explanation=payload["explanation"],
         snippet_token=snippet_token,
         snippet_url=f"{settings.API_URL.rstrip('/')}/api/v1/snippet/{snippet_token}.js" if snippet_token else None,
+        access_method=github_meta["access_method"],
+        permission_level=github_meta["permission_level"],
+        selected_repository=github_meta["selected_repository"],
+        project_root=github_meta["project_root"],
+        build_command=github_meta["build_command"],
+        package_manager=github_meta["package_manager"],
     )
 
 
@@ -125,7 +142,7 @@ async def get_connection_status(
     db: AsyncSession = Depends(get_db),
 ):
     site = await _get_site(db, site_id, auth.org_id)
-    return _status_response(site)
+    return _status_response(site, auth.org_id)
 
 
 @router.get("/{site_id}/connection/capabilities")
@@ -228,10 +245,11 @@ async def save_connection(
     if creds.connection_type == "github":
         site.github_repo = f"{creds.owner}/{creds.repo}" if creds.owner and creds.repo else site.github_repo
         site.github_branch = creds.branch or "main"
+        site.github_installation_id = None
 
     await db.commit()
     await db.refresh(site)
-    response = _status_response(site)
+    response = _status_response(site, auth.org_id)
     response.last_tested_at = datetime.now(timezone.utc).isoformat()
     return response
 
@@ -246,4 +264,7 @@ async def delete_connection(
     site.cms_token_encrypted = None
     site.cms_token_iv = None
     site.connection_type = "crawler"
+    site.github_installation_id = None
+    site.github_repo = None
+    site.github_branch = "main"
     await db.commit()

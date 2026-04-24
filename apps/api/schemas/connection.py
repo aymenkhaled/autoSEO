@@ -56,3 +56,9 @@ class ConnectionStatusResponse(BaseModel):
     last_tested_at: Optional[str] = None
     snippet_token: Optional[str] = None
     snippet_url: Optional[str] = None
+    access_method: Literal["github_app", "fine_grained_token", "none"] = "none"
+    permission_level: Literal["audit_only", "pr_only", "advanced_token"] = "audit_only"
+    selected_repository: Optional[str] = None
+    project_root: Optional[str] = ""
+    build_command: Optional[str] = None
+    package_manager: Optional[str] = None

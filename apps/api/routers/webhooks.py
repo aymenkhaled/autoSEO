@@ -339,12 +339,23 @@ async def handle_github_webhook(
     request: Request,
     x_github_event: Optional[str] = Header(None, alias="x-github-event"),
     x_github_delivery: Optional[str] = Header(None, alias="x-github-delivery"),
+    x_hub_signature_256: Optional[str] = Header(None, alias="x-hub-signature-256"),
     db: AsyncSession = Depends(get_db),
 ):
     if _is_replayed(x_github_delivery):
         return {"status": "duplicate"}
 
-    body = await request.json()
+    raw_body = await request.body()
+    if settings.GITHUB_WEBHOOK_SECRET:
+        expected = "sha256=" + hmac.new(
+            settings.GITHUB_WEBHOOK_SECRET.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not x_hub_signature_256 or not hmac.compare_digest(expected, x_hub_signature_256):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid GitHub webhook signature")
+
+    body = json.loads(raw_body.decode("utf-8") or "{}")
     if x_github_event == "pull_request":
         action = body.get("action")
         if action == "closed" and body.get("pull_request", {}).get("merged"):

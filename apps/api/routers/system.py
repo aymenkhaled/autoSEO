@@ -24,6 +24,7 @@ async def get_runtime_readiness():
         else "local_jwt"
     )
     ai_configured = bool(settings.ANTHROPIC_API_KEY)
+    github_app_configured = bool(settings.GITHUB_APP_ID and settings.GITHUB_APP_PRIVATE_KEY and settings.GITHUB_APP_SLUG)
     stripe_configured = bool(settings.STRIPE_SECRET_KEY and settings.STRIPE_WEBHOOK_SECRET)
     webhook_delivery_available = True
 
@@ -32,6 +33,7 @@ async def get_runtime_readiness():
         "providers": {
             "supabase": auth_mode == "supabase",
             "anthropic": ai_configured,
+            "github_app": github_app_configured,
             "stripe": stripe_configured,
             "resend": bool(settings.RESEND_API_KEY),
             "webhooks": webhook_delivery_available,
@@ -62,6 +64,15 @@ async def get_runtime_readiness():
                     "Stripe credentials are present, but checkout/portal flows still need end-to-end wiring before upgrade actions should appear."
                     if stripe_configured
                     else "Billing state is stored and visible, but checkout and portal flows are intentionally disabled until Stripe is fully wired."
+                ),
+            ),
+            "github_pr_fixes": readiness_payload(
+                READINESS_WORKING if github_app_configured else READINESS_SETUP_REQUIRED,
+                label="GitHub App ready" if github_app_configured else "GitHub App setup required",
+                description=(
+                    "GitHub App PR-only access is configured. Users can install the app on selected repositories."
+                    if github_app_configured
+                    else "Configure GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_SLUG to enable the trusted SaaS GitHub App flow. Fine-grained token fallback can still be used manually."
                 ),
             ),
             "reports": readiness_payload(

@@ -5,31 +5,34 @@ Phase 2 additions:
   so the UI can show "300 pages missing meta description" as one row instead
   of 300 separate rows.
 """
-import json
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel
 
+from config import get_settings
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.issue import IssueResponse, IssueListResponse
 from models.tables import ChangeLog, Issue, Page, Site
-from packages.cms_adapters.github_adapter import GitHubAdapter
-from packages.shared.encryption import decrypt_credential
+from packages.ai_engine.engine import AIProviderUnavailable
+from packages.ai_engine.repo_patch import generate_repo_patch_preview
 from packages.shared.fix_workflows import build_root_cause_workflow
 from packages.shared.notifications import notify_org_users
 from packages.shared.readiness import connection_status_payload
 from packages.shared.seo_domain import (
     FIX_STATUS_DEPLOYED,
+    FIX_STATUS_DEPLOYED_AFTER_MERGE,
     FIX_STATUS_GITHUB_PR_CREATED,
     issue_is_auto_fixable,
     normalize_fix_status,
 )
+from services.github_connection import github_adapter_for_site
 
 router = APIRouter(tags=["issues"])
+settings = get_settings()
 
 
 ISSUE_GUIDANCE = {
@@ -111,7 +114,8 @@ DEFAULT_GUIDANCE = {
 class RootCauseFixRequest(BaseModel):
     site_id: UUID
     issue_type: str
-    mode: Literal["plan", "github_pr"] = "plan"
+    mode: Literal["plan", "ai_preview", "github_pr"] = "plan"
+    business_context: dict[str, Any] | None = None
 
 
 def _guidance(issue_type: str) -> dict:
@@ -150,7 +154,7 @@ async def list_issues(
         count_query = count_query.where(Issue.severity == severity)
     if fix_status:
         normalized = normalize_fix_status(fix_status)
-        status_values = [FIX_STATUS_DEPLOYED, "applied"] if normalized == FIX_STATUS_DEPLOYED else [normalized]
+        status_values = [FIX_STATUS_DEPLOYED, "applied", FIX_STATUS_DEPLOYED_AFTER_MERGE] if normalized == FIX_STATUS_DEPLOYED else [normalized]
         query = query.where(Issue.fix_status.in_(status_values))
         count_query = count_query.where(Issue.fix_status.in_(status_values))
     if fix_type:
@@ -191,7 +195,7 @@ async def list_aggregated_issues(
         conditions.append(Issue.severity == severity)
     if fix_status:
         normalized = normalize_fix_status(fix_status)
-        status_values = [FIX_STATUS_DEPLOYED, "applied"] if normalized == FIX_STATUS_DEPLOYED else [normalized]
+        status_values = [FIX_STATUS_DEPLOYED, "applied", FIX_STATUS_DEPLOYED_AFTER_MERGE] if normalized == FIX_STATUS_DEPLOYED else [normalized]
         conditions.append(Issue.fix_status.in_(status_values))
 
     site_for_workflow = None
@@ -252,6 +256,7 @@ async def list_aggregated_issues(
                 connection=connection_for_workflow,
                 ownership_verified=bool(getattr(site_for_workflow, "ownership_verified", False)),
                 examples=workflow_examples,
+                ai_configured=bool(settings.ANTHROPIC_API_KEY),
             ),
             "examples": workflow_examples,
         })
@@ -307,10 +312,57 @@ async def root_cause_fix_workflow(
         connection=connection,
         ownership_verified=bool(site.ownership_verified),
         examples=examples[:8],
+        ai_configured=bool(settings.ANTHROPIC_API_KEY),
     )
 
     if data.mode == "plan":
         return {"mode": "plan", "site_id": str(site.id), "issue_type": issue_type, **guidance, "fix_workflow": workflow}
+
+    async def _ai_preview(adapter, creds: dict) -> dict:
+        analysis = await adapter.analyze_static_app(creds.get("project_root") or "")
+        candidates = await adapter.candidate_files_for_issue(
+            issue_type,
+            project_root=creds.get("project_root") or "",
+        )
+        contexts = await adapter.read_text_files([item["path"] for item in candidates])
+        preview = await generate_repo_patch_preview(
+            issue_type=issue_type,
+            title=guidance["title"],
+            summary=guidance["summary"],
+            recommended_fix=guidance["recommended_fix"],
+            site_domain=site.domain,
+            affected_urls=[example["url"] for example in examples if example.get("url")],
+            examples=examples,
+            manual_steps=workflow["manual_steps"],
+            repo_analysis=analysis,
+            file_contexts=contexts,
+            project_root=creds.get("project_root") or "",
+            business_context=data.business_context,
+        )
+        return {
+            "mode": "ai_preview",
+            "site_id": str(site.id),
+            "issue_type": issue_type,
+            **guidance,
+            "fix_workflow": workflow,
+            "repo_analysis": analysis,
+            "ai_preview": preview,
+        }
+
+    if data.mode == "ai_preview":
+        if not workflow["can_preview_ai"]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "AI preview is not ready for this root cause yet.",
+                    "missing_requirements": workflow["missing_requirements"],
+                },
+            )
+        adapter, creds = await github_adapter_for_site(str(auth.org_id), site)
+        try:
+            return await _ai_preview(adapter, creds)
+        except AIProviderUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
 
     if not workflow["can_create_github_pr"]:
         raise HTTPException(
@@ -321,24 +373,42 @@ async def root_cause_fix_workflow(
             },
         )
 
-    creds = _decrypt_site_creds(str(auth.org_id), site)
-    adapter = GitHubAdapter(
-        owner=creds.get("owner") or (site.github_repo or "/").split("/")[0],
-        repo=creds.get("repo") or (site.github_repo or "/").split("/", 1)[-1],
-        token=creds.get("token", ""),
-        branch=creds.get("branch") or site.github_branch or "main",
-        project_root=creds.get("project_root") or "",
-    )
-    result = await adapter.create_static_fix_pr(
-        issue_type=issue_type,
-        title=guidance["title"],
-        site_domain=site.domain,
-        affected_urls=[example["url"] for example in examples if example.get("url")],
-        manual_steps=workflow["manual_steps"],
-        project_root=creds.get("project_root") or "",
-        build_command=creds.get("build_command"),
-        package_manager=creds.get("package_manager"),
-    )
+    adapter, creds = await github_adapter_for_site(str(auth.org_id), site)
+    if workflow["github_strategy"] == "safe_file_patch":
+        result = await adapter.create_static_fix_pr(
+            issue_type=issue_type,
+            title=guidance["title"],
+            site_domain=site.domain,
+            affected_urls=[example["url"] for example in examples if example.get("url")],
+            manual_steps=workflow["manual_steps"],
+            project_root=creds.get("project_root") or "",
+            build_command=creds.get("build_command"),
+            package_manager=creds.get("package_manager"),
+        )
+        preview = None
+    else:
+        try:
+            preview_payload = await _ai_preview(adapter, creds)
+        except AIProviderUnavailable as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+        preview = preview_payload["ai_preview"]
+        if not preview.get("safety", {}).get("ok", False):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "AI patch failed safety validation. Review the preview and required data.",
+                    "safety": preview.get("safety"),
+                    "ai_preview": preview,
+                },
+            )
+        result = await adapter.create_ai_patch_pr(
+            issue_type=issue_type,
+            title=guidance["title"],
+            site_domain=site.domain,
+            affected_urls=[example["url"] for example in examples if example.get("url")],
+            preview=preview,
+            project_root=creds.get("project_root") or "",
+        )
     if not result.get("success"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result)
 
@@ -354,6 +424,9 @@ async def root_cause_fix_workflow(
             "branch": result.get("branch"),
             "mode": result.get("mode"),
             "files_changed": result.get("files_changed", []),
+            "ai_model": result.get("ai_model") or (preview or {}).get("ai_model"),
+            "risk_level": result.get("risk_level") or (preview or {}).get("risk_level"),
+            "recrawl_verification_status": "pending_deploy_recrawl",
         }
 
     db.add(
@@ -369,6 +442,9 @@ async def root_cause_fix_workflow(
                 "affected_count": len(matching_issues),
                 "mode": result.get("mode"),
                 "files_changed": result.get("files_changed", []),
+                "ai_model": result.get("ai_model") or (preview or {}).get("ai_model"),
+                "risk_level": result.get("risk_level") or (preview or {}).get("risk_level"),
+                "recrawl_verification_status": "pending_deploy_recrawl",
             },
         )
     )
@@ -401,9 +477,10 @@ async def root_cause_fix_workflow(
                 "affected_count": len(matching_issues),
                 "pr_url": result.get("pr_url"),
                 "pr_number": result.get("pr_number"),
-                "mode": result.get("mode"),
-            },
-        )
+                        "mode": result.get("mode"),
+                        "risk_level": result.get("risk_level") or (preview or {}).get("risk_level"),
+                    },
+                )
     except Exception:
         pass
 
@@ -413,6 +490,7 @@ async def root_cause_fix_workflow(
         "issue_type": issue_type,
         "fix_workflow": {**workflow, "status": FIX_STATUS_GITHUB_PR_CREATED},
         "github": result,
+        "ai_preview": preview,
     }
 
 
@@ -430,13 +508,3 @@ async def get_issue(
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     return issue
-
-
-def _decrypt_site_creds(org_id: str, site: Site) -> dict:
-    if not site.cms_token_encrypted or not site.cms_token_iv:
-        return {}
-    plaintext = decrypt_credential(org_id, site.cms_token_encrypted, site.cms_token_iv)
-    try:
-        return json.loads(plaintext)
-    except json.JSONDecodeError:
-        return {"token": plaintext}
