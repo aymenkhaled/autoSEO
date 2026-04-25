@@ -29,6 +29,7 @@ from packages.shared.seo_domain import (
     issue_is_auto_fixable,
     normalize_fix_status,
 )
+from services.opportunities import issue_priorities
 from services.github_connection import github_adapter_for_site
 
 router = APIRouter(tags=["issues"])
@@ -491,6 +492,27 @@ async def root_cause_fix_workflow(
         "fix_workflow": {**workflow, "status": FIX_STATUS_GITHUB_PR_CREATED},
         "github": result,
         "ai_preview": preview,
+    }
+
+
+@router.get("/prioritized")
+async def prioritized_issues(
+    site_id: UUID = Query(...),
+    fix_status: Optional[str] = Query("pending"),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    site = (
+        await db.execute(select(Site).where(Site.id == site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    priorities = await issue_priorities(db, site=site, fix_status=fix_status or "pending")
+    return {
+        "site_id": str(site.id),
+        "issues": priorities,
+        "total": len(priorities),
+        "message": "Priority combines technical severity, affected pages, GSC visibility, estimated click loss, and fix readiness.",
     }
 
 

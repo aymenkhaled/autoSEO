@@ -12,6 +12,10 @@ const aggregatedMock = vi.fn()
 const listIssuesMock = vi.fn()
 const connectionStatusMock = vi.fn()
 const installCodeMock = vi.fn()
+const snippetInsightsMock = vi.fn()
+const searchConsoleStatusMock = vi.fn()
+const searchConsolePerformanceMock = vi.fn()
+const opportunitiesSiteMock = vi.fn()
 const apiGetMock = vi.fn()
 
 vi.mock('@/lib/api-client', () => ({
@@ -32,6 +36,17 @@ vi.mock('@/lib/api-client', () => ({
   },
   snippetApi: {
     installCode: (...args: any[]) => installCodeMock(...args),
+    insights: (...args: any[]) => snippetInsightsMock(...args),
+  },
+  searchConsoleApi: {
+    status: (...args: any[]) => searchConsoleStatusMock(...args),
+    performance: (...args: any[]) => searchConsolePerformanceMock(...args),
+    connectUrl: vi.fn(),
+    sync: vi.fn(),
+  },
+  opportunitiesApi: {
+    site: (...args: any[]) => opportunitiesSiteMock(...args),
+    prioritizedIssues: vi.fn(),
   },
 }))
 
@@ -119,6 +134,10 @@ describe('SiteDetailPage workspace tabs', () => {
       explanation: 'AutoSEO can monitor but not deploy changes.',
     })
     installCodeMock.mockResolvedValue({})
+    snippetInsightsMock.mockResolvedValue({ status: 'no_data', insights: [] })
+    searchConsoleStatusMock.mockResolvedValue({ connected: false, configured: false, totals: { impressions: 0, clicks: 0, ctr: 0 } })
+    searchConsolePerformanceMock.mockResolvedValue({ totals: { impressions: 0, clicks: 0, ctr: 0 } })
+    opportunitiesSiteMock.mockResolvedValue({ opportunities: [] })
     apiGetMock.mockImplementation((path: string) => {
       if (path === 'sites/site-123/pages') return { json: async () => ({ pages: [], crawl_context: { monitoring_mode: 'crawler' } }) }
       if (path === 'crawls') return { json: async () => ({ crawls: [] }) }

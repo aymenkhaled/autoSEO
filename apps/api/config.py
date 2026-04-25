@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     GITHUB_APP_SLUG: str = ""
     GITHUB_WEBHOOK_SECRET: str = ""
 
+    # --- Google Search Console ---
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = ""
+
     # --- App ---
     FRONTEND_URL: str = "http://localhost:5173"
     API_URL: str = "http://localhost:8001"

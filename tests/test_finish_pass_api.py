@@ -25,8 +25,10 @@ from models.tables import (
     Page,
     PageSource,
     ScheduledReport,
+    SearchConsolePageMetric,
     Site,
     SnippetEvent,
+    ConnectionCertification,
     User,
 )
 from packages.shared.notifications import notify_org_users
@@ -498,3 +500,207 @@ def test_crawl_response_exposes_coverage_fields():
     assert payload["urls_skipped"] == 20
     assert payload["crawl_limit"] == 10
     assert payload["coverage_details"]["reason"] == "crawl_limit_reached"
+
+
+def test_search_console_status_is_clear_when_disconnected():
+    user, org = run(seed_user())
+
+    async def seed_site():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="GSC Site", domain="https://gsc-site.test")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site())
+    status_response = run(api_request("GET", f"/api/v1/sites/{site_id}/search-console/status", headers=auth_headers(user)))
+    assert status_response.status_code == 200
+    payload = status_response.json()
+    assert payload["connected"] is False
+    assert payload["readiness"] == "setup_required"
+    assert payload["scope"] == "https://www.googleapis.com/auth/webmasters.readonly"
+
+    connect_response = run(api_request("GET", f"/api/v1/google/search-console/connect-url?site_id={site_id}", headers=auth_headers(user)))
+    assert connect_response.status_code == 200
+    assert connect_response.json()["configured"] is False
+    assert connect_response.json()["connect_url"] is None
+
+
+def test_prioritized_issues_include_search_console_impact():
+    user, org = run(seed_user())
+
+    async def seed_priority_rows():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Priority Site", domain="https://priority.test", ownership_verified=True)
+            session.add(site)
+            await session.flush()
+            crawl = Crawl(site_id=site.id, org_id=org.id, status="completed")
+            session.add(crawl)
+            await session.flush()
+            page = Page(crawl_id=crawl.id, site_id=site.id, org_id=org.id, url="https://priority.test/pricing", title="Pricing")
+            session.add(page)
+            await session.flush()
+            session.add(Issue(
+                crawl_id=crawl.id,
+                site_id=site.id,
+                org_id=org.id,
+                page_id=page.id,
+                type="duplicate_title",
+                category="meta",
+                severity="medium",
+                impact_score=60,
+                fix_type="manual",
+                fix_status="pending",
+            ))
+            session.add(SearchConsolePageMetric(
+                org_id=org.id,
+                site_id=site.id,
+                page_url=page.url,
+                date_start="2026-01-01",
+                date_end="2026-03-31",
+                clicks=20,
+                impressions=5000,
+                ctr=0.004,
+                position=8.4,
+            ))
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_priority_rows())
+    response = run(api_request("GET", f"/api/v1/issues/prioritized?site_id={site_id}", headers=auth_headers(user)))
+    assert response.status_code == 200, response.text
+    issue = response.json()["issues"][0]
+    assert issue["type"] == "duplicate_title"
+    assert issue["gsc_impact"]["impressions"] == 5000
+    assert issue["gsc_impact"]["estimated_click_loss"] > 0
+    assert issue["priority_score"] > 100
+
+
+def test_site_opportunities_combine_gsc_and_snippet_signals():
+    user, org = run(seed_user())
+
+    async def seed_opportunity_rows():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Opportunity Site", domain="https://opportunity.test")
+            session.add(site)
+            await session.flush()
+            crawl = Crawl(site_id=site.id, org_id=org.id, status="completed")
+            session.add(crawl)
+            await session.flush()
+            page = Page(crawl_id=crawl.id, site_id=site.id, org_id=org.id, url="https://opportunity.test/page", title="Crawler title")
+            session.add(page)
+            await session.flush()
+            session.add(SearchConsolePageMetric(
+                org_id=org.id,
+                site_id=site.id,
+                page_url=page.url,
+                date_start="2026-01-01",
+                date_end="2026-03-31",
+                clicks=4,
+                impressions=1200,
+                ctr=0.003,
+                position=6.2,
+            ))
+            for _ in range(3):
+                session.add(SnippetEvent(
+                    site_id=site.id,
+                    org_id=org.id,
+                    page_url=page.url,
+                    title="Rendered title",
+                    lcp_ms=4100,
+                    inp_ms=260,
+                    cls_score=0.04,
+                    device_type="mobile",
+                ))
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_opportunity_rows())
+    response = run(api_request("GET", f"/api/v1/sites/{site_id}/opportunities", headers=auth_headers(user)))
+    assert response.status_code == 200, response.text
+    opportunities = response.json()["opportunities"]
+    assert any(item["source"] == "gsc" and item["type"] == "high_impressions_low_ctr" for item in opportunities)
+    assert any(item["source"] == "snippet" and item["type"] == "runtime_lcp_ms_p75" for item in opportunities)
+    assert any(item["source"] == "snippet" and item["type"] == "rendered_title_differs_from_crawl" for item in opportunities)
+
+
+def test_connection_certification_sandbox_persists_to_capabilities():
+    user, org = run(seed_user())
+
+    async def seed_site():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Certified Site", domain="https://certified.test")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site())
+    response = run(api_request(
+        "POST",
+        f"/api/v1/sites/{site_id}/connections/wordpress/certify",
+        headers=auth_headers(user),
+        json={"mode": "sandbox"},
+    ))
+    assert response.status_code == 200
+    assert response.json()["status"] == "sandbox_only"
+
+    capabilities = run(api_request("GET", f"/api/v1/sites/{site_id}/connection/capabilities", headers=auth_headers(user)))
+    assert capabilities.status_code == 200
+    wordpress = next(item for item in capabilities.json()["capabilities"] if item["connection_type"] == "wordpress")
+    assert wordpress["certification"]["status"] == "sandbox_only"
+
+    async def assert_saved():
+        async with AsyncSessionLocal() as session:
+            certs = (await session.execute(select(ConnectionCertification))).scalars().all()
+            assert len(certs) == 1
+
+    run(assert_saved())
+
+
+def test_generated_report_includes_opportunities_and_search_console_totals():
+    user, org = run(seed_user())
+
+    async def seed_report_rows():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Report Site", domain="https://report.test")
+            session.add(site)
+            await session.flush()
+            crawl = Crawl(site_id=site.id, org_id=org.id, status="completed", seo_score=52, issues_found=1, pages_crawled=1, created_at=datetime.now(timezone.utc))
+            session.add(crawl)
+            await session.flush()
+            page = Page(crawl_id=crawl.id, site_id=site.id, org_id=org.id, url="https://report.test/pricing", title="Pricing")
+            session.add(page)
+            await session.flush()
+            session.add(Issue(
+                crawl_id=crawl.id,
+                site_id=site.id,
+                org_id=org.id,
+                page_id=page.id,
+                type="duplicate_title",
+                category="meta",
+                severity="medium",
+                impact_score=60,
+                fix_type="manual",
+                fix_status="github_pr_created",
+            ))
+            session.add(SearchConsolePageMetric(
+                org_id=org.id,
+                site_id=site.id,
+                page_url=page.url,
+                date_start="2026-01-01",
+                date_end="2026-03-31",
+                clicks=10,
+                impressions=1000,
+                ctr=0.01,
+                position=7,
+            ))
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_report_rows())
+    response = run(api_request("POST", "/api/v1/reports/generate", headers=auth_headers(user), json={"site_id": str(site_id)}))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["search_console"]["totals"]["impressions"] == 1000
+    assert payload["github_fix_status"]["open_pr_issue_count"] == 1
+    assert payload["top_opportunities"]

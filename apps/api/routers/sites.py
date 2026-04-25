@@ -26,12 +26,21 @@ from models.tables import (
     Page,
     PageSource,
     ScheduledReport,
+    SearchConsoleConnection,
+    SearchConsoleInspection,
+    SearchConsolePageMetric,
+    SearchConsoleQueryMetric,
+    SearchConsoleSitemap,
+    SearchConsoleSyncRun,
     Site,
+    SiteOpportunity,
     SnippetEvent,
+    SnippetInsight,
 )
 from packages.crawler.url_utils import is_safe_url
 from packages.shared.readiness import connection_status_payload, site_setup_payload
 from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK
+from services.opportunities import site_opportunities
 
 router = APIRouter(tags=["sites"])
 
@@ -101,6 +110,30 @@ async def _delete_site_records(db: AsyncSession, site_id: UUID, org_id: UUID) ->
         ),
         "scheduled_reports": _delete_count(
             await db.execute(delete(ScheduledReport).where(ScheduledReport.site_id == site_id, ScheduledReport.org_id == org_id))
+        ),
+        "site_opportunities": _delete_count(
+            await db.execute(delete(SiteOpportunity).where(SiteOpportunity.site_id == site_id, SiteOpportunity.org_id == org_id))
+        ),
+        "snippet_insights": _delete_count(
+            await db.execute(delete(SnippetInsight).where(SnippetInsight.site_id == site_id, SnippetInsight.org_id == org_id))
+        ),
+        "search_console_inspections": _delete_count(
+            await db.execute(delete(SearchConsoleInspection).where(SearchConsoleInspection.site_id == site_id, SearchConsoleInspection.org_id == org_id))
+        ),
+        "search_console_sitemaps": _delete_count(
+            await db.execute(delete(SearchConsoleSitemap).where(SearchConsoleSitemap.site_id == site_id, SearchConsoleSitemap.org_id == org_id))
+        ),
+        "search_console_query_metrics": _delete_count(
+            await db.execute(delete(SearchConsoleQueryMetric).where(SearchConsoleQueryMetric.site_id == site_id, SearchConsoleQueryMetric.org_id == org_id))
+        ),
+        "search_console_page_metrics": _delete_count(
+            await db.execute(delete(SearchConsolePageMetric).where(SearchConsolePageMetric.site_id == site_id, SearchConsolePageMetric.org_id == org_id))
+        ),
+        "search_console_sync_runs": _delete_count(
+            await db.execute(delete(SearchConsoleSyncRun).where(SearchConsoleSyncRun.site_id == site_id, SearchConsoleSyncRun.org_id == org_id))
+        ),
+        "search_console_connections": _delete_count(
+            await db.execute(delete(SearchConsoleConnection).where(SearchConsoleConnection.site_id == site_id, SearchConsoleConnection.org_id == org_id))
         ),
         "issues": _delete_count(
             await db.execute(delete(Issue).where(Issue.site_id == site_id, Issue.org_id == org_id))
@@ -271,6 +304,30 @@ async def get_site_summary(
     ).all()
     setup = site_setup_payload(site, latest_crawl)
     connection = connection_status_payload(site)
+    gsc_connection = (
+        await db.execute(
+            select(SearchConsoleConnection)
+            .where(SearchConsoleConnection.site_id == site_id, SearchConsoleConnection.org_id == auth.org_id)
+        )
+    ).scalar_one_or_none()
+    gsc_latest_sync = (
+        await db.execute(
+            select(SearchConsoleSyncRun)
+            .where(SearchConsoleSyncRun.site_id == site_id, SearchConsoleSyncRun.org_id == auth.org_id)
+            .order_by(SearchConsoleSyncRun.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    gsc_totals = (
+        await db.execute(
+            select(
+                func.sum(SearchConsolePageMetric.clicks),
+                func.sum(SearchConsolePageMetric.impressions),
+                func.avg(SearchConsolePageMetric.ctr),
+                func.avg(SearchConsolePageMetric.position),
+            ).where(SearchConsolePageMetric.site_id == site_id, SearchConsolePageMetric.org_id == auth.org_id)
+        )
+    ).one()
 
     return {
         "site": SiteResponse.model_validate(site).model_dump(mode="json"),
@@ -304,6 +361,18 @@ async def get_site_summary(
         },
         "setup": setup,
         "connection": connection,
+        "search_console": {
+            "connected": bool(gsc_connection),
+            "property_url": gsc_connection.property_url if gsc_connection else site.gsc_property_url,
+            "last_sync_at": gsc_connection.last_sync_at.isoformat() if gsc_connection and gsc_connection.last_sync_at else None,
+            "latest_sync_status": gsc_latest_sync.status if gsc_latest_sync else None,
+            "totals": {
+                "clicks": float(gsc_totals[0] or 0),
+                "impressions": float(gsc_totals[1] or 0),
+                "ctr": float(gsc_totals[2] or 0),
+                "position": float(gsc_totals[3] or 0),
+            },
+        },
         "audit_note": "Raw issue totals can move up or down when crawl coverage changes; use grouped root causes to judge whether the underlying SEO problems actually changed.",
     }
 
@@ -409,6 +478,20 @@ async def list_site_pages(
         ],
         "total": total,
     }
+
+
+@router.get("/{site_id}/opportunities")
+async def get_site_opportunities(
+    site_id: UUID,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    site = (
+        await db.execute(select(Site).where(Site.id == site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    return await site_opportunities(db, site=site)
 
 
 @router.post("/{site_id}/verify")

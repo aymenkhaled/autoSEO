@@ -61,6 +61,7 @@ class Site(Base):
     gsc_property_url = Column(Text)
     gsc_token_encrypted = Column(Text)
     crawl_frequency = Column(Text, default="weekly")
+    next_scheduled_crawl = Column(DateTime(timezone=True))
     crawl_max_pages = Column(Integer, default=500)
     respect_robots_txt = Column(Boolean, default=True)
     crawl_delay_ms = Column(Integer, default=1000)
@@ -537,4 +538,212 @@ class FixVersion(Base):
     __table_args__ = (
         Index("idx_fix_versions_issue_id", "issue_id"),
         Index("idx_fix_versions_site_id", "site_id"),
+    )
+
+
+class SearchConsoleConnection(Base):
+    __tablename__ = "search_console_connections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    property_url = Column(Text, nullable=False)
+    token_encrypted = Column(Text, nullable=False)
+    token_iv = Column(Text, nullable=False)
+    scopes = Column(ARRAY(Text), nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    connected_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    last_sync_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_search_console_connections_site", "site_id", unique=True),
+        Index("idx_search_console_connections_org", "org_id"),
+    )
+
+
+class SearchConsoleSyncRun(Base):
+    __tablename__ = "search_console_sync_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    connection_id = Column(UUID(as_uuid=True), ForeignKey("search_console_connections.id"))
+    status = Column(Text, nullable=False, default="running")
+    days = Column(Integer, nullable=False, default=90)
+    pages_synced = Column(Integer, nullable=False, default=0)
+    queries_synced = Column(Integer, nullable=False, default=0)
+    inspections_synced = Column(Integer, nullable=False, default=0)
+    sitemaps_synced = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text)
+    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_search_console_sync_runs_site", "site_id", "created_at"),
+    )
+
+
+class SearchConsolePageMetric(Base):
+    __tablename__ = "search_console_page_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    sync_run_id = Column(UUID(as_uuid=True), ForeignKey("search_console_sync_runs.id"))
+    page_url = Column(Text, nullable=False)
+    date_start = Column(Text, nullable=False)
+    date_end = Column(Text, nullable=False)
+    device = Column(Text)
+    country = Column(Text)
+    clicks = Column(Numeric(12, 2), nullable=False, default=0)
+    impressions = Column(Numeric(12, 2), nullable=False, default=0)
+    ctr = Column(Numeric(8, 6), nullable=False, default=0)
+    position = Column(Numeric(8, 3), nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_gsc_page_metrics_site_page", "site_id", "page_url"),
+        Index("idx_gsc_page_metrics_site_impressions", "site_id", "impressions"),
+    )
+
+
+class SearchConsoleQueryMetric(Base):
+    __tablename__ = "search_console_query_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    sync_run_id = Column(UUID(as_uuid=True), ForeignKey("search_console_sync_runs.id"))
+    page_url = Column(Text)
+    query = Column(Text, nullable=False)
+    date_start = Column(Text, nullable=False)
+    date_end = Column(Text, nullable=False)
+    device = Column(Text)
+    country = Column(Text)
+    clicks = Column(Numeric(12, 2), nullable=False, default=0)
+    impressions = Column(Numeric(12, 2), nullable=False, default=0)
+    ctr = Column(Numeric(8, 6), nullable=False, default=0)
+    position = Column(Numeric(8, 3), nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_gsc_query_metrics_site_query", "site_id", "query"),
+        Index("idx_gsc_query_metrics_site_page", "site_id", "page_url"),
+    )
+
+
+class SearchConsoleInspection(Base):
+    __tablename__ = "search_console_inspections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    sync_run_id = Column(UUID(as_uuid=True), ForeignKey("search_console_sync_runs.id"))
+    url = Column(Text, nullable=False)
+    verdict = Column(Text)
+    coverage_state = Column(Text)
+    indexing_state = Column(Text)
+    robots_txt_state = Column(Text)
+    page_fetch_state = Column(Text)
+    last_crawl_time = Column(Text)
+    google_canonical = Column(Text)
+    user_canonical = Column(Text)
+    raw = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_gsc_inspections_site_url", "site_id", "url"),
+    )
+
+
+class SearchConsoleSitemap(Base):
+    __tablename__ = "search_console_sitemaps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    sync_run_id = Column(UUID(as_uuid=True), ForeignKey("search_console_sync_runs.id"))
+    path = Column(Text, nullable=False)
+    is_pending = Column(Boolean)
+    is_sitemaps_index = Column(Boolean)
+    last_submitted = Column(Text)
+    last_downloaded = Column(Text)
+    errors = Column(Integer, default=0)
+    warnings = Column(Integer, default=0)
+    raw = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_gsc_sitemaps_site_path", "site_id", "path"),
+    )
+
+
+class SiteOpportunity(Base):
+    __tablename__ = "site_opportunities"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    source = Column(Text, nullable=False)
+    type = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    description = Column(Text)
+    priority_score = Column(Integer, nullable=False, default=0)
+    impact_label = Column(Text)
+    affected_url = Column(Text)
+    issue_type = Column(Text)
+    data = Column(JSONB)
+    status = Column(Text, nullable=False, default="open")
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_site_opportunities_site_priority", "site_id", "priority_score"),
+        Index("idx_site_opportunities_site_status", "site_id", "status"),
+    )
+
+
+class ConnectionCertification(Base):
+    __tablename__ = "connection_certifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    connection_type = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="sandbox_only")
+    message = Column(Text)
+    details = Column(JSONB)
+    last_tested_at = Column(DateTime(timezone=True))
+    safe_fix_tested_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_connection_certifications_site_type", "site_id", "connection_type", unique=True),
+    )
+
+
+class SnippetInsight(Base):
+    __tablename__ = "snippet_insights"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    page_url = Column(Text)
+    insight_type = Column(Text, nullable=False)
+    severity = Column(Text, nullable=False, default="medium")
+    device_type = Column(Text)
+    metric_name = Column(Text)
+    metric_value = Column(Numeric(12, 3))
+    sample_size = Column(Integer, nullable=False, default=0)
+    title = Column(Text, nullable=False)
+    description = Column(Text)
+    data = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_snippet_insights_site_type", "site_id", "insight_type"),
     )

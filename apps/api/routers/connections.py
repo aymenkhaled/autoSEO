@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,16 +26,25 @@ from schemas.connection import (
     ConnectionStatusResponse,
     ConnectionTestResponse,
 )
-from models.tables import Site
+from models.tables import ConnectionCertification, Site
 from packages.cms_adapters import get_adapter
 from packages.shared.encryption import encrypt_credential
 from packages.shared.readiness import connection_status_payload
 from packages.shared.seo_domain import CONNECTION_CAPABILITY_SUMMARY, connection_capabilities
 from config import get_settings
-from services.github_connection import github_connection_metadata
+from services.github_connection import decrypt_site_credentials, github_connection_metadata
 
 router = APIRouter(tags=["connections"])
 settings = get_settings()
+
+
+class CertificationRequest(BaseModel):
+    mode: Literal["sandbox", "credentials", "safe_fix"] = "sandbox"
+    credentials: ConnectionCredentials | None = None
+    test_page_id: str | None = None
+    field: str = "title"
+    test_value: str = "AutoSEO certification test - revert if visible"
+    confirm_safe_fix: bool = False
 
 
 def _build_kwargs(creds: ConnectionCredentials, site: Site | None = None) -> dict:
@@ -89,6 +100,36 @@ def _persistable_creds(creds: ConnectionCredentials) -> dict:
             "build_command": creds.build_command,
             "package_manager": creds.package_manager,
         }
+    return {}
+
+
+def _saved_adapter_kwargs(connection_type: str, site: Site, org_id) -> dict:
+    creds = decrypt_site_credentials(str(org_id), site)
+    if connection_type == "wordpress":
+        return {
+            "site_url": site.cms_endpoint or site.domain,
+            "username": creds.get("username") or "",
+            "app_password": creds.get("app_password") or "",
+        }
+    if connection_type == "shopify":
+        return {
+            "shop_domain": creds.get("shop_domain") or site.cms_endpoint or "",
+            "access_token": creds.get("access_token") or "",
+        }
+    if connection_type == "webflow":
+        return {"site_id": creds.get("site_id") or "", "token": creds.get("token") or ""}
+    if connection_type == "github":
+        return {
+            "owner": creds.get("owner") or (site.github_repo or "/").split("/")[0],
+            "repo": creds.get("repo") or (site.github_repo or "/").split("/", 1)[-1],
+            "token": creds.get("token") or creds.get("github_token") or "",
+            "branch": creds.get("branch") or site.github_branch or "main",
+            "project_root": creds.get("project_root") or "",
+        }
+    if connection_type == "crawler":
+        return {"domain": site.domain}
+    if connection_type == "snippet":
+        return {"site_token": str(site.snippet_token) if site.snippet_token else None}
     return {}
 
 
@@ -152,11 +193,36 @@ async def get_connection_capabilities(
     db: AsyncSession = Depends(get_db),
 ):
     site = await _get_site(db, site_id, auth.org_id)
+    certifications = (
+        await db.execute(
+            select(ConnectionCertification).where(
+                ConnectionCertification.site_id == site_id,
+                ConnectionCertification.org_id == auth.org_id,
+            )
+        )
+    ).scalars().all()
+    cert_map = {
+        item.connection_type: {
+            "status": item.status,
+            "message": item.message,
+            "last_tested_at": item.last_tested_at.isoformat() if item.last_tested_at else None,
+            "safe_fix_tested_at": item.safe_fix_tested_at.isoformat() if item.safe_fix_tested_at else None,
+        }
+        for item in certifications
+    }
     return {
         "current_connection_type": site.connection_type,
         "current_status": connection_status_payload(site),
         "capabilities": [
-            connection_capabilities(connection_type)
+            {
+                **connection_capabilities(connection_type),
+                "certification": cert_map.get(connection_type, {
+                    "status": "not_tested",
+                    "message": "This connection has not been certified for this site yet.",
+                    "last_tested_at": None,
+                    "safe_fix_tested_at": None,
+                }),
+            }
             for connection_type in CONNECTION_CAPABILITY_SUMMARY.keys()
         ],
     }
@@ -252,6 +318,100 @@ async def save_connection(
     response = _status_response(site, auth.org_id)
     response.last_tested_at = datetime.now(timezone.utc).isoformat()
     return response
+
+
+@router.post("/{site_id}/connections/{connection_type}/certify")
+async def certify_connection(
+    site_id: UUID,
+    connection_type: str,
+    data: CertificationRequest | None = None,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    site = await _get_site(db, site_id, auth.org_id)
+    request = data or CertificationRequest()
+    if connection_type not in CONNECTION_CAPABILITY_SUMMARY:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Unsupported connection type")
+
+    now = datetime.now(timezone.utc)
+    certification = (
+        await db.execute(
+            select(ConnectionCertification).where(
+                ConnectionCertification.site_id == site_id,
+                ConnectionCertification.org_id == auth.org_id,
+                ConnectionCertification.connection_type == connection_type,
+            )
+        )
+    ).scalar_one_or_none()
+    if not certification:
+        certification = ConnectionCertification(
+            org_id=auth.org_id,
+            site_id=site_id,
+            connection_type=connection_type,
+        )
+        db.add(certification)
+
+    if request.mode == "sandbox":
+        certification.status = "sandbox_only"
+        certification.message = "Sandbox certification passed. This proves UI/API wiring only; it does not prove real platform credentials."
+        certification.details = {"mode": "sandbox", "external_calls": False}
+        certification.last_tested_at = now
+    else:
+        if connection_type in {"crawler", "snippet"}:
+            certification.status = "production_ready" if connection_type == "crawler" else "credentials_tested"
+            certification.message = "Monitoring connection certified. This method remains read-only for deployment."
+            certification.details = {"mode": request.mode, "read_only": True}
+            certification.last_tested_at = now
+        else:
+            if not site.ownership_verified:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Verify site ownership before certifying writable integrations.")
+            try:
+                if request.credentials:
+                    adapter = get_adapter(connection_type, **_build_kwargs(request.credentials, site))
+                else:
+                    adapter = get_adapter(connection_type, **_saved_adapter_kwargs(connection_type, site, auth.org_id))
+                ok = await adapter.test_connection()
+            except Exception as exc:
+                ok = False
+                certification.details = {"mode": request.mode, "error": str(exc)}
+            certification.last_tested_at = now
+            if not ok:
+                certification.status = "failed"
+                certification.message = "Credential test failed. AutoSEO will not mark this integration production-ready."
+            elif request.mode == "safe_fix":
+                if not request.confirm_safe_fix or not request.test_page_id:
+                    certification.status = "credentials_tested"
+                    certification.message = "Credentials work. Safe-fix certification needs a staging/draft test page ID and explicit confirmation."
+                    certification.details = {"mode": "safe_fix", "safe_fix_tested": False}
+                else:
+                    result = await adapter.apply_fix(request.test_page_id, request.field, request.test_value)
+                    certification.status = "safe_fix_tested" if result.success else "failed"
+                    certification.safe_fix_tested_at = now if result.success else certification.safe_fix_tested_at
+                    certification.message = result.message
+                    certification.details = {
+                        "mode": "safe_fix",
+                        "test_page_id": request.test_page_id,
+                        "field": request.field,
+                        "success": result.success,
+                        "rollback_value_present": bool(result.rollback_value),
+                    }
+            else:
+                certification.status = "credentials_tested"
+                certification.message = "Credentials work. Run a safe staging/draft fix test before marking this production-ready."
+                certification.details = {"mode": "credentials", "safe_fix_tested": False}
+
+    certification.updated_at = now
+    await db.commit()
+    await db.refresh(certification)
+    return {
+        "site_id": str(site_id),
+        "connection_type": connection_type,
+        "status": certification.status,
+        "message": certification.message,
+        "details": certification.details or {},
+        "last_tested_at": certification.last_tested_at.isoformat() if certification.last_tested_at else None,
+        "safe_fix_tested_at": certification.safe_fix_tested_at.isoformat() if certification.safe_fix_tested_at else None,
+    }
 
 
 @router.delete("/{site_id}/connection", status_code=status.HTTP_204_NO_CONTENT)

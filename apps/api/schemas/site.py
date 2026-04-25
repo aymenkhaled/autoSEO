@@ -12,7 +12,7 @@ class SiteCreate(BaseModel):
     cms_endpoint: Optional[str] = None
     github_repo: Optional[str] = None
     github_branch: Optional[str] = "main"
-    crawl_frequency: str = Field(default="weekly", pattern="^(daily|weekly|biweekly|monthly)$")
+    crawl_frequency: str = Field(default="weekly", pattern="^(never|daily|weekly|biweekly|monthly|after_github_pr_merge)$")
     crawl_max_pages: int = Field(default=500, ge=1, le=50000)
     respect_robots_txt: bool = True
     crawl_delay_ms: int = Field(default=1000, ge=500, le=10000)
@@ -22,7 +22,7 @@ class SiteUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     connection_type: Optional[str] = Field(None, pattern="^(crawler|wordpress|shopify|webflow|github|snippet)$")
     cms_endpoint: Optional[str] = None
-    crawl_frequency: Optional[str] = Field(None, pattern="^(daily|weekly|biweekly|monthly)$")
+    crawl_frequency: Optional[str] = Field(None, pattern="^(never|daily|weekly|biweekly|monthly|after_github_pr_merge)$")
     crawl_max_pages: Optional[int] = Field(None, ge=1, le=50000)
     respect_robots_txt: Optional[bool] = None
     crawl_delay_ms: Optional[int] = Field(None, ge=500, le=10000)
@@ -39,6 +39,7 @@ class SiteResponse(BaseModel):
     github_branch: Optional[str] = None
     snippet_token: Optional[UUID] = None
     crawl_frequency: str
+    next_scheduled_crawl: Optional[datetime] = None
     crawl_max_pages: int
     respect_robots_txt: bool
     crawl_delay_ms: int

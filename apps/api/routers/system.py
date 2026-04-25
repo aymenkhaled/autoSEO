@@ -25,6 +25,7 @@ async def get_runtime_readiness():
     )
     ai_configured = bool(settings.ANTHROPIC_API_KEY)
     github_app_configured = bool(settings.GITHUB_APP_ID and settings.GITHUB_APP_PRIVATE_KEY and settings.GITHUB_APP_SLUG)
+    gsc_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
     stripe_configured = bool(settings.STRIPE_SECRET_KEY and settings.STRIPE_WEBHOOK_SECRET)
     webhook_delivery_available = True
 
@@ -34,6 +35,7 @@ async def get_runtime_readiness():
             "supabase": auth_mode == "supabase",
             "anthropic": ai_configured,
             "github_app": github_app_configured,
+            "google_search_console": gsc_configured,
             "stripe": stripe_configured,
             "resend": bool(settings.RESEND_API_KEY),
             "webhooks": webhook_delivery_available,
@@ -73,6 +75,15 @@ async def get_runtime_readiness():
                     "GitHub App PR-only access is configured. Users can install the app on selected repositories."
                     if github_app_configured
                     else "Configure GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_APP_SLUG to enable the trusted SaaS GitHub App flow. Fine-grained token fallback can still be used manually."
+                ),
+            ),
+            "search_console": readiness_payload(
+                READINESS_WORKING if gsc_configured else READINESS_SETUP_REQUIRED,
+                label="Search Console OAuth ready" if gsc_configured else "Google OAuth setup required",
+                description=(
+                    "Google Search Console read-only OAuth is configured for traffic, query, sitemap, and URL inspection sync."
+                    if gsc_configured
+                    else "Configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET before users can connect Search Console properties."
                 ),
             ),
             "reports": readiness_payload(

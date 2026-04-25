@@ -11,10 +11,20 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_current_user, get_db
-from models.tables import Crawl, Issue, Page, ScheduledReport, Site
+from models.tables import (
+    Crawl,
+    Issue,
+    Page,
+    ScheduledReport,
+    SearchConsoleConnection,
+    SearchConsolePageMetric,
+    Site,
+)
 from packages.shared.readiness import READINESS_SAVED_ONLY, readiness_payload
+from packages.shared.seo_domain import FIX_STATUS_GITHUB_PR_CREATED
 from routers.issues import _guidance
 from schemas.auth import AuthContext
+from services.opportunities import site_opportunities
 
 router = APIRouter(tags=["reports"])
 
@@ -224,6 +234,36 @@ async def generate_report(
             "pages_delta": (target_crawl.pages_crawled or 0) - (previous_crawl.pages_crawled or 0),
         }
 
+    gsc_connection = (
+        await db.execute(
+            select(SearchConsoleConnection)
+            .where(SearchConsoleConnection.site_id == site.id, SearchConsoleConnection.org_id == auth.org_id)
+        )
+    ).scalar_one_or_none()
+    gsc_totals = (
+        await db.execute(
+            select(
+                func.sum(SearchConsolePageMetric.clicks),
+                func.sum(SearchConsolePageMetric.impressions),
+                func.avg(SearchConsolePageMetric.ctr),
+                func.avg(SearchConsolePageMetric.position),
+            ).where(SearchConsolePageMetric.site_id == site.id, SearchConsolePageMetric.org_id == auth.org_id)
+        )
+    ).one()
+    open_prs = int(
+        (
+            await db.execute(
+                select(func.count(Issue.id)).where(
+                    Issue.site_id == site.id,
+                    Issue.org_id == auth.org_id,
+                    Issue.fix_status == FIX_STATUS_GITHUB_PR_CREATED,
+                )
+            )
+        ).scalar()
+        or 0
+    )
+    opportunities = await site_opportunities(db, site=site)
+
     return {
         "site_id": str(site.id),
         "crawl_id": str(target_crawl.id),
@@ -241,14 +281,31 @@ async def generate_report(
             "severity_counts": {severity: int(count) for severity, count in severity_rows},
         },
         "root_causes": root_causes,
+        "search_console": {
+            "connected": bool(gsc_connection),
+            "property_url": gsc_connection.property_url if gsc_connection else site.gsc_property_url,
+            "last_sync_at": gsc_connection.last_sync_at.isoformat() if gsc_connection and gsc_connection.last_sync_at else None,
+            "totals": {
+                "clicks": float(gsc_totals[0] or 0),
+                "impressions": float(gsc_totals[1] or 0),
+                "ctr": float(gsc_totals[2] or 0),
+                "position": float(gsc_totals[3] or 0),
+            },
+        },
+        "github_fix_status": {
+            "open_pr_issue_count": open_prs,
+            "message": "GitHub PR-created issues remain open until a deploy and recrawl proves the root cause disappeared.",
+        },
+        "top_opportunities": opportunities["opportunities"][:8],
         "changed_since_last_crawl": changed_since_last,
         "next_actions": [
             {
-                "title": item["title"],
-                "action": item["recommended_fix"],
-                "affected_count": item["affected_count"],
+                "title": item.get("title"),
+                "action": item.get("description") or item.get("recommended_fix"),
+                "priority_score": item.get("priority_score"),
+                "source": item.get("source"),
             }
-            for item in root_causes[:5]
+            for item in opportunities["opportunities"][:5]
         ],
         "export_ready": True,
         "note": "Raw issue totals can change when crawl limits or sampling change; use root-cause groups to judge whether the SEO problems changed.",

@@ -109,6 +109,21 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
     },
   })
 
+  const certifyConnection = useMutation({
+    mutationFn: (mode: 'sandbox' | 'credentials') => connectionsApi.certify(site.id, form.connection_type, {
+      mode,
+      credentials: mode === 'credentials' ? form : undefined,
+    }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['connection-capabilities', site.id] })
+      toast.success(result.message || 'Connection certification updated')
+    },
+    onError: async (error: any) => {
+      const detail = error?.response ? await error.response.json().catch(() => null) : null
+      toast.error(detail?.detail || error?.message || 'Certification failed')
+    },
+  })
+
   const capabilities = capabilitiesQuery.data?.capabilities ?? []
   const selectedCapability = capabilities.find((item: any) => item.connection_type === form.connection_type)
   const fields = CONNECTION_FIELDS[form.connection_type]
@@ -164,6 +179,12 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">{selectedCapability.unsupported_message}</p>
+              <div className="rounded-lg border border-border bg-background p-3">
+                <p className="text-xs font-semibold text-foreground">Certification: {selectedCapability.certification?.status?.replace(/_/g, ' ') || 'not tested'}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedCapability.certification?.message || 'Run sandbox or credential certification before trusting this connection for a customer.'}
+                </p>
+              </div>
             </div>
           )}
 
@@ -272,6 +293,10 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
             <button onClick={() => testConnection.mutate(form)} disabled={testConnection.isPending}
               className="flex-1 h-10 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50">
               {testConnection.isPending ? 'Testing...' : 'Test connection'}
+            </button>
+            <button onClick={() => certifyConnection.mutate(form.sandbox ? 'sandbox' : 'credentials')} disabled={certifyConnection.isPending || (isWritableChoice && needsVerification)}
+              className="flex-1 h-10 rounded-lg border border-border text-sm text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+              {certifyConnection.isPending ? 'Certifying...' : form.sandbox ? 'Certify sandbox' : 'Certify credentials'}
             </button>
             {form.connection_type === 'github' && (
               <button onClick={() => repoAnalysis.mutate()} disabled={repoAnalysis.isPending}

@@ -819,6 +819,8 @@ async def _run_scheduled():
     async with SessionLocal() as db:
         sites = (await db.execute(select(Site).where(Site.status != "inactive"))).scalars().all()
         for site in sites:
+            if site.crawl_frequency in {"never", "after_github_pr_merge"}:
+                continue
             freq = freq_map.get(site.crawl_frequency or "weekly", timedelta(days=7))
             if site.last_crawled_at and (now - site.last_crawled_at) < freq:
                 continue

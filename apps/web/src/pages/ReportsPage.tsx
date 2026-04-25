@@ -133,6 +133,46 @@ export default function ReportsPage() {
                 )}
               </div>
 
+              <div className="grid lg:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">Search Console impact</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {report.search_console?.connected ? `Property: ${report.search_console.property_url}` : 'Search Console is not connected for this site yet.'}
+                  </p>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div><p className="text-xl font-bold text-foreground">{Math.round(report.search_console?.totals?.impressions ?? 0).toLocaleString()}</p><p className="text-xs text-muted-foreground">Impressions</p></div>
+                    <div><p className="text-xl font-bold text-foreground">{Math.round(report.search_console?.totals?.clicks ?? 0).toLocaleString()}</p><p className="text-xs text-muted-foreground">Clicks</p></div>
+                    <div><p className="text-xl font-bold text-foreground">{((report.search_console?.totals?.ctr ?? 0) * 100).toFixed(1)}%</p><p className="text-xs text-muted-foreground">CTR</p></div>
+                    <div><p className="text-xl font-bold text-foreground">{(report.search_console?.totals?.position ?? 0).toFixed(1)}</p><p className="text-xs text-muted-foreground">Avg position</p></div>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">GitHub proof status</p>
+                  <p className="text-xs text-muted-foreground mt-1">{report.github_fix_status?.message}</p>
+                  <p className="text-3xl font-bold text-foreground mt-4">{report.github_fix_status?.open_pr_issue_count ?? 0}</p>
+                  <p className="text-xs text-muted-foreground">PR-created issue rows awaiting deploy + recrawl proof</p>
+                </div>
+              </div>
+
+              {(report.top_opportunities ?? []).length > 0 && (
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">Top opportunities</p>
+                  <div className="grid lg:grid-cols-2 gap-3 mt-3">
+                    {report.top_opportunities.slice(0, 6).map((item: any) => (
+                      <div key={`${item.source}-${item.type}-${item.affected_url || item.issue_type}`} className="rounded-lg border border-border bg-card p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold text-foreground">{item.title}</p>
+                            <p className="text-[11px] text-muted-foreground mt-1">{item.description}</p>
+                          </div>
+                          <span className="text-[11px] px-2 py-0.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">{item.priority_score}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {report.note && (
                 <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-100">
                   {report.note}

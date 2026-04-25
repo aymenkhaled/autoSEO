@@ -130,6 +130,8 @@ export const connectionsApi = {
     api.put(`sites/${siteId}/connection`, { json: payload }).json<any>(),
   remove: (siteId: string) =>
     api.delete(`sites/${siteId}/connection`),
+  certify: (siteId: string, connectionType: ConnectionType, data: any) =>
+    api.post(`sites/${siteId}/connections/${connectionType}/certify`, { json: data }).json<any>(),
 }
 
 export const githubApi = {
@@ -152,6 +154,26 @@ export const githubApi = {
 export const snippetApi = {
   installCode: (siteId: string) =>
     api.get('snippet/install-code', { searchParams: { site_id: siteId } }).json<any>(),
+  insights: (siteId: string) =>
+    api.get('snippet/insights', { searchParams: { site_id: siteId } }).json<any>(),
+}
+
+export const searchConsoleApi = {
+  connectUrl: (siteId: string) =>
+    api.get('google/search-console/connect-url', { searchParams: { site_id: siteId } }).json<any>(),
+  status: (siteId: string) =>
+    api.get(`sites/${siteId}/search-console/status`).json<any>(),
+  sync: (siteId: string, data: { days?: number; inspect_limit?: number } = {}) =>
+    api.post(`sites/${siteId}/search-console/sync`, { json: data }).json<any>(),
+  performance: (siteId: string) =>
+    api.get(`sites/${siteId}/search-console/performance`).json<any>(),
+}
+
+export const opportunitiesApi = {
+  site: (siteId: string) =>
+    api.get(`sites/${siteId}/opportunities`).json<any>(),
+  prioritizedIssues: (siteId: string) =>
+    api.get('issues/prioritized', { searchParams: { site_id: siteId } }).json<any>(),
 }
 
 export const reportsApi = {

@@ -15,6 +15,7 @@ from config import get_settings
 from dependencies import get_current_user, get_db
 from models.tables import Site, SnippetEvent
 from schemas.auth import AuthContext
+from services.snippet_insights import compute_snippet_insights, persist_snippet_insights
 
 router = APIRouter(tags=["snippet"])
 settings = get_settings()
@@ -110,6 +111,24 @@ async def get_install_code(
         "collect_url": _snippet_collect_url(),
         "script_tag": f'<script src="{snippet_url}" async></script>',
     }
+
+
+@router.get("/insights")
+async def get_snippet_insights(
+    site_id: UUID,
+    persist: bool = False,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    site = (
+        await db.execute(select(Site).where(Site.id == site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    payload = await (persist_snippet_insights(db, site=site) if persist else compute_snippet_insights(db, site=site))
+    if persist:
+        await db.commit()
+    return payload
 
 
 @router.get("/{site_token}.js", include_in_schema=False)

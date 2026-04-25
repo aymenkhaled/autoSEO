@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import {
   AlertTriangle,
   ArrowLeft,
+  BarChart3,
   CheckCircle2,
   ExternalLink,
   Globe,
@@ -16,11 +17,12 @@ import {
   Settings2,
   Shield,
   Sparkles,
+  TrendingUp,
   Trash2,
 } from 'lucide-react'
 
 import { DeleteSiteDialog } from '@/components/sites/DeleteSiteDialog'
-import { api, connectionsApi, issuesApi, sitesApi, snippetApi } from '@/lib/api-client'
+import { api, connectionsApi, issuesApi, opportunitiesApi, searchConsoleApi, sitesApi, snippetApi } from '@/lib/api-client'
 import { SUPABASE_AUTH_ENABLED } from '@/lib/auth-mode'
 import { getLocalAccessToken } from '@/lib/auth-storage'
 import { readinessMeta } from '@/lib/readiness'
@@ -173,6 +175,30 @@ export default function SiteDetailPage() {
     enabled: !!id && connectionQuery.data?.monitoring_mode === 'snippet',
   })
 
+  const searchConsoleStatusQuery = useQuery({
+    queryKey: ['search-console-status', id],
+    queryFn: () => searchConsoleApi.status(id!),
+    enabled: !!id,
+  })
+
+  const searchConsolePerformanceQuery = useQuery({
+    queryKey: ['search-console-performance', id],
+    queryFn: () => searchConsoleApi.performance(id!),
+    enabled: !!id && !!searchConsoleStatusQuery.data?.connected,
+  })
+
+  const opportunitiesQuery = useQuery({
+    queryKey: ['site-opportunities', id],
+    queryFn: () => opportunitiesApi.site(id!),
+    enabled: !!id,
+  })
+
+  const snippetInsightsQuery = useQuery({
+    queryKey: ['snippet-insights', id],
+    queryFn: () => snippetApi.insights(id!),
+    enabled: !!id,
+  })
+
   const { progress, streamError } = useCrawlProgress(activeCrawlId)
 
   useEffect(() => {
@@ -234,6 +260,33 @@ export default function SiteDetailPage() {
     onError: () => toast.error('Crawl limit could not be updated'),
   })
 
+  const connectSearchConsole = useMutation({
+    mutationFn: () => searchConsoleApi.connectUrl(id!),
+    onSuccess: (result) => {
+      if (result.connect_url) {
+        window.open(result.connect_url, '_blank', 'noopener,noreferrer')
+        toast.success('Google authorization opened in a new tab')
+      } else {
+        toast.error(result.message || 'Google Search Console is not configured')
+      }
+    },
+    onError: () => toast.error('Could not prepare Google Search Console connection'),
+  })
+
+  const syncSearchConsole = useMutation({
+    mutationFn: () => searchConsoleApi.sync(id!, { days: 90, inspect_limit: 10 }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['search-console-status', id] })
+      queryClient.invalidateQueries({ queryKey: ['search-console-performance', id] })
+      queryClient.invalidateQueries({ queryKey: ['site-opportunities', id] })
+      toast.success('Search Console sync finished')
+    },
+    onError: async (error: any) => {
+      const detail = error?.response ? await error.response.json().catch(() => null) : null
+      toast.error(detail?.detail || error?.message || 'Search Console sync failed')
+    },
+  })
+
   const planRootCauseFix = useMutation({
     mutationFn: (group: any) => issuesApi.rootCauseFix({ site_id: id!, issue_type: group.type, mode: 'plan' }),
     onSuccess: (result) => setWorkflowPanel(result),
@@ -270,6 +323,10 @@ export default function SiteDetailPage() {
   const rawIssues: any[] = rawIssuesQuery.data?.issues ?? []
   const pages = pagesQuery.data?.pages ?? []
   const connection = connectionQuery.data ?? summary?.connection
+  const searchConsole = searchConsoleStatusQuery.data ?? summary?.search_console
+  const gscPerformance = searchConsolePerformanceQuery.data
+  const opportunities: any[] = opportunitiesQuery.data?.opportunities ?? []
+  const snippetInsights: any[] = snippetInsightsQuery.data?.insights ?? []
 
   const loading = siteQuery.isLoading || summaryQuery.isLoading
   const totalGroupedAffected = groups.reduce((sum, group) => sum + (group.count ?? 0), 0)
@@ -480,7 +537,7 @@ export default function SiteDetailPage() {
               </div>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-4">
+            <div className="grid lg:grid-cols-4 gap-4">
               <div className="rounded-xl border border-border bg-card p-6 space-y-3">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -506,6 +563,42 @@ export default function SiteDetailPage() {
                     {snippetInstallQuery.data.script_tag}
                   </code>
                 )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">Search Console</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Read-only GSC data tells AutoSEO which issues affect real Google impressions, CTR, positions, indexing, and sitemaps.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <TinyPill
+                    label={searchConsole?.connected ? 'Connected' : 'Not connected'}
+                    className={searchConsole?.connected ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-muted text-muted-foreground border-border'}
+                  />
+                  {searchConsole?.property_url && <TinyPill label={searchConsole.property_url} />}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => connectSearchConsole.mutate()}
+                    disabled={connectSearchConsole.isPending}
+                    className="h-9 px-3 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    {connectSearchConsole.isPending ? 'Preparing...' : searchConsole?.connected ? 'Reconnect' : 'Connect Google'}
+                  </button>
+                  <button
+                    onClick={() => syncSearchConsole.mutate()}
+                    disabled={syncSearchConsole.isPending || !searchConsole?.connected}
+                    className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {syncSearchConsole.isPending ? 'Syncing...' : 'Sync 90 days'}
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {searchConsole?.last_sync_at ? `Last synced ${formatRelativeTime(searchConsole.last_sync_at)}` : searchConsole?.description || 'Connect Google Search Console to unlock real traffic priority.'}
+                </p>
               </div>
 
               <div className="rounded-xl border border-border bg-card p-6 space-y-3">
@@ -608,6 +701,81 @@ export default function SiteDetailPage() {
                 {summary?.audit_note || groupedIssuesQuery.data?.note}
               </div>
             )}
+
+            <div className="grid lg:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      Next best opportunities
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Ranked by technical severity, Google demand, runtime signals, and fix readiness.
+                    </p>
+                  </div>
+                  <TinyPill label={`${opportunities.length} found`} />
+                </div>
+                <div className="space-y-3">
+                  {opportunities.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Connect Search Console, install snippet, or run a crawl to generate prioritized opportunities.</p>
+                  ) : opportunities.slice(0, 5).map((item) => (
+                    <div key={`${item.source}-${item.type}-${item.affected_url || item.issue_type}`} className="rounded-lg border border-border bg-background p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground">{item.title}</p>
+                          <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
+                        </div>
+                        <TinyPill label={`${item.priority_score}`} className="bg-cyan-500/10 text-cyan-300 border-cyan-500/20" />
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <TinyPill label={item.source} />
+                        {item.impact_label && <TinyPill label={item.impact_label} />}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-primary" />
+                      Google + runtime signals
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Search Console shows Google performance. Snippet shows what real browsers see after JS renders.
+                    </p>
+                  </div>
+                  <TinyPill label={searchConsole?.connected ? 'GSC connected' : 'GSC missing'} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-muted/30 p-3">
+                    <p className="text-lg font-bold text-foreground">{Math.round(gscPerformance?.totals?.impressions ?? searchConsole?.totals?.impressions ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground">GSC impressions</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 p-3">
+                    <p className="text-lg font-bold text-foreground">{Math.round(gscPerformance?.totals?.clicks ?? searchConsole?.totals?.clicks ?? 0).toLocaleString()}</p>
+                    <p className="text-[11px] text-muted-foreground">GSC clicks</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 p-3">
+                    <p className="text-lg font-bold text-foreground">{((gscPerformance?.totals?.ctr ?? searchConsole?.totals?.ctr ?? 0) * 100).toFixed(1)}%</p>
+                    <p className="text-[11px] text-muted-foreground">Average CTR</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 p-3">
+                    <p className="text-lg font-bold text-foreground">{snippetInsights.length}</p>
+                    <p className="text-[11px] text-muted-foreground">Runtime insights</p>
+                  </div>
+                </div>
+                {snippetInsights.slice(0, 3).map((item) => (
+                  <div key={`${item.type}-${item.page_url}`} className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-xs font-semibold text-foreground">{item.title}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">{item.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div className="rounded-xl border border-border bg-card p-6">
               <div className="flex items-center justify-between gap-4 flex-wrap">
