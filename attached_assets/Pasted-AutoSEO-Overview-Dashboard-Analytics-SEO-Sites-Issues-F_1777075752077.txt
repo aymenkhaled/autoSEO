@@ -1,0 +1,637 @@
+AutoSEO
+Overview
+
+Dashboard
+Analytics
+SEO
+
+Sites
+Issues
+Fixes
+Keywords
+Competitors
+Reports
+
+Reports
+Account
+
+Team
+Integrations
+API Keys
+Billing
+Settings
+KH
+khaledaymen850@gmail.com
+
+free plan · Local auth
+
+
+
+
+
+KH
+Issues
+Root causes first, raw rows only when you need debugging detail.(374 affected pages/items)
+
+Filters
+Root causes
+Raw issues
+Use issue categories and root-cause groups over raw totals; crawl limits, free-tier sampling, and pagination can change the number of rows without changing the underlying problems.
+Critical
+Meta Tags
+33 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 2970
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://smartpaie.tn/tarifs
+
+https://smartpaie.tn/solutions/villes/tunis
+
+https://smartpaie.tn/solutions/villes/sousse
+
+https://smartpaie.tn/solutions/villes/sfax
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Critical
+Rendering
+30 affected
+Pages render as an empty SPA shell
+Search crawlers are receiving the JavaScript shell instead of page-specific HTML.
+
+Impact 2850
+Why it matters
+
+If the initial HTML has no real content, titles, headings, or body copy per route, indexability can collapse even when the browser looks fine.
+
+Recommended fix
+
+Add SSR/prerendering for public routes, or generate static HTML per route before crawl/index time.
+
+Examples
+
+https://smartpaie.tn/guides/comprendre-fiche-paie-tunisie
+
+Page is a client-rendered SPA shell — crawlers see empty HTML
+
+https://smartpaie.tn/guides/charges-patronales-tunisie
+
+Page is a client-rendered SPA shell — crawlers see empty HTML
+
+https://smartpaie.tn/guides/calcul-salaire-net-tunisie
+
+Page is a client-rendered SPA shell — crawlers see empty HTML
+
+https://smartpaie.tn/guides/bareme-irpp-tunisie-2025-2026
+
+Page is a client-rendered SPA shell — crawlers see empty HTML
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Connect GitHub as the fix deployment method.
+
+Verify site ownership before AutoSEO can create deployment PRs.
+
+Configure ANTHROPIC_API_KEY for deep AI code patches. Deterministic robots/sitemap PRs can still work without AI.
+
+High
+Meta Tags
+33 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 2640
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://smartpaie.tn/tarifs
+
+https://smartpaie.tn/solutions/villes/tunis
+
+https://smartpaie.tn/solutions/villes/sousse
+
+https://smartpaie.tn/solutions/villes/sfax
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+High
+Headings
+33 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 2475
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://smartpaie.tn/tarifs
+
+https://smartpaie.tn/solutions/villes/tunis
+
+https://smartpaie.tn/solutions/villes/sousse
+
+https://smartpaie.tn/solutions/villes/sfax
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+High
+Mobile
+33 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 2145
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://smartpaie.tn/tarifs
+
+No <meta name='viewport'> tag
+
+https://smartpaie.tn/solutions/villes/tunis
+
+No <meta name='viewport'> tag
+
+https://smartpaie.tn/solutions/villes/sousse
+
+No <meta name='viewport'> tag
+
+https://smartpaie.tn/solutions/villes/sfax
+
+No <meta name='viewport'> tag
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Content
+30 affected
+Pages target the same search intent
+Several URLs appear to target the same primary query.
+
+Impact 1800
+Why it matters
+
+Search engines may rotate or split ranking signals across similar pages.
+
+Recommended fix
+
+Merge overlapping pages, canonicalize weaker pages, or rewrite each page for a distinct intent.
+
+Examples
+
+https://smartpaie.tn/guides/comprendre-fiche-paie-tunisie
+
+Target query 'de en gestion paie paie smart tunisie' is shared with: https://smartpaie.tn/, https://smartpaie.tn/comparatif/smart-paie-vs-bison, https://smartpaie.tn/comparatif/smart-paie-vs-excel, https://smartpaie.tn/comparatif/smart-paie-vs-odoo, https://smartpaie.tn/comparatif/smart-paie-vs-sage…
+
+https://smartpaie.tn/guides/charges-patronales-tunisie
+
+Target query 'de en gestion paie paie smart tunisie' is shared with: https://smartpaie.tn/, https://smartpaie.tn/comparatif/smart-paie-vs-bison, https://smartpaie.tn/comparatif/smart-paie-vs-excel, https://smartpaie.tn/comparatif/smart-paie-vs-odoo, https://smartpaie.tn/comparatif/smart-paie-vs-sage…
+
+https://smartpaie.tn/guides/calcul-salaire-net-tunisie
+
+Target query 'de en gestion paie paie smart tunisie' is shared with: https://smartpaie.tn/, https://smartpaie.tn/comparatif/smart-paie-vs-bison, https://smartpaie.tn/comparatif/smart-paie-vs-excel, https://smartpaie.tn/comparatif/smart-paie-vs-odoo, https://smartpaie.tn/comparatif/smart-paie-vs-sage…
+
+https://smartpaie.tn/guides/bareme-irpp-tunisie-2025-2026
+
+Target query 'de en gestion paie paie smart tunisie' is shared with: https://smartpaie.tn/, https://smartpaie.tn/comparatif/smart-paie-vs-bison, https://smartpaie.tn/comparatif/smart-paie-vs-excel, https://smartpaie.tn/comparatif/smart-paie-vs-odoo, https://smartpaie.tn/comparatif/smart-paie-vs-sage…
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Technical
+38 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 1710
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Content
+33 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 1650
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://smartpaie.tn/tarifs
+
+0 words (homepage threshold: 100)
+
+https://smartpaie.tn/solutions/villes/tunis
+
+0 words (generic threshold: 250)
+
+https://smartpaie.tn/solutions/villes/sousse
+
+0 words (generic threshold: 250)
+
+https://smartpaie.tn/solutions/villes/sfax
+
+0 words (generic threshold: 250)
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+High
+Schema
+20 affected
+Review/rating schema needs proof
+JSON-LD includes aggregateRating or named reviews that should match real visible review sources.
+
+Impact 1400
+Why it matters
+
+Unsupported review markup can violate Google review-snippet policy and create manual-action risk.
+
+Recommended fix
+
+Remove fake/testimonial-only review markup, or connect it to real first-party reviews visible on the page.
+
+Examples
+
+https://strategynavigator.ai/cookie-policy
+
+Review markup includes named reviews: Sarah Chen, Michael Rodriguez, Jennifer Walsh
+
+https://strategynavigator.ai/cookie-policy
+
+aggregateRating rating=4.8 reviewCount=87
+
+https://strategynavigator.ai/privacy-policy
+
+Review markup includes named reviews: Sarah Chen, Michael Rodriguez, Jennifer Walsh
+
+https://strategynavigator.ai/privacy-policy
+
+aggregateRating rating=4.8 reviewCount=87
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Connect GitHub as the fix deployment method.
+
+Verify site ownership before AutoSEO can create deployment PRs.
+
+Configure ANTHROPIC_API_KEY for deep AI code patches. Deterministic robots/sitemap PRs can still work without AI.
+
+Low
+Schema
+38 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 950
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Low
+Technical
+33 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 660
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://smartpaie.tn/tarifs
+
+No <meta charset> declared
+
+https://smartpaie.tn/solutions/villes/tunis
+
+No <meta charset> declared
+
+https://smartpaie.tn/solutions/villes/sousse
+
+No <meta charset> declared
+
+https://smartpaie.tn/solutions/villes/sfax
+
+No <meta charset> declared
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Schema
+10 affected
+Structured data contains an expired offer date
+JSON-LD includes priceValidUntil/validThrough values that are already in the past.
+
+Impact 400
+Why it matters
+
+Expired offer markup can make rich results invalid or misleading.
+
+Recommended fix
+
+Update or remove expired date fields in Product/Offer JSON-LD.
+
+Examples
+
+https://strategynavigator.ai/cookie-policy
+
+priceValidUntil=2025-12-31
+
+https://strategynavigator.ai/privacy-policy
+
+priceValidUntil=2025-12-31
+
+https://strategynavigator.ai/terms-of-service
+
+priceValidUntil=2025-12-31
+
+https://strategynavigator.ai/signup
+
+priceValidUntil=2025-12-31
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Connect GitHub as the fix deployment method.
+
+Verify site ownership before AutoSEO can create deployment PRs.
+
+Configure ANTHROPIC_API_KEY for deep AI code patches. Deterministic robots/sitemap PRs can still work without AI.
+
+High
+Meta Tags
+2 affected
+Multiple pages share the same title
+Routes are reusing one static title instead of a unique title per page.
+
+Impact 170
+Why it matters
+
+Duplicate titles make pages compete with each other and reduce click relevance in search results.
+
+Recommended fix
+
+Generate a unique title per route from route metadata, CMS fields, or server-rendered head tags.
+
+Examples
+
+https://smartpaie.tn/
+
+20 pages share this title: smart paie - gestion de paie en tunisie
+
+https://strategynavigator.ai/
+
+10 pages share this title: strategynavigator.ai - ai-powered strategic planning platform for business leade
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Connect GitHub as the fix deployment method.
+
+Verify site ownership before AutoSEO can create deployment PRs.
+
+Configure ANTHROPIC_API_KEY for deep AI code patches. Deterministic robots/sitemap PRs can still work without AI.
+
+Low
+Meta Tags
+4 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 120
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Technical
+2 affected
+Missing sitemap.xml
+AutoSEO could not verify a public /sitemap.xml endpoint.
+
+Impact 100
+Why it matters
+
+Sitemaps help discovery, freshness, and large-site crawl coverage.
+
+Recommended fix
+
+Publish a valid XML sitemap and reference it from robots.txt.
+
+Examples
+
+Site-wide issue
+
+/sitemap.xml returned 404
+
+Site-wide issue
+
+/sitemap.xml returned 404
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Connect GitHub as the fix deployment method.
+
+Verify site ownership before AutoSEO can create deployment PRs.
+
+Medium
+Meta Tags
+1 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 60
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://strategynavigator.ai/
+
+10 pages share this meta description
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Medium
+Performance
+1 affected
+SEO issue
+AutoSEO found a repeated SEO signal that needs review.
+
+Impact 45
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://ahmedbenyahia-pro-ten.vercel.app/
+
+34 images not in WebP/AVIF
+
+Fix workflow
+
+Setup needed
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Made with Replit
+
+
+Apollo

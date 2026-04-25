@@ -1,0 +1,218 @@
+AutoSEO
+Overview
+
+Dashboard
+Analytics
+SEO
+
+Sites
+Issues
+Fixes
+Keywords
+Competitors
+Reports
+
+Reports
+Account
+
+Team
+Integrations
+API Keys
+Billing
+Settings
+KH
+khaledaymen850@gmail.com
+
+free plan · Local auth
+
+
+
+
+
+KH
+
+aymen
+82
+Monitoring and deployment ready
+Verified
+https://aymen-kh.vercel.app
+Last crawl 5m ago
+Crawler monitoring
+Write integration: GitHub
+Run Crawl
+Crawl status: completed
+1/1 pages
+AutoSEO scanned all 1 safe URLs discovered from the sitemap.
+
+Setup
+Audit
+Pages
+Fixes
+1
+
+Pages
+
+13
+
+Raw Issues
+
+4
+
+Grouped Root Causes
+
+1
+
+Deployed Fixes
+
+Crawl coverage
+Shows why issue totals can change when page coverage changes.
+
+Limit: 500
+1
+
+Discovered URLs
+
+1
+
+Scanned URLs
+
+0
+
+Skipped URLs
+
+500
+
+Crawl limit
+
+AutoSEO scanned all 1 safe URLs discovered from the sitemap.
+
+Raw issue totals can move up or down when crawl coverage changes; use grouped root causes to judge whether the underlying SEO problems actually changed.
+Root causes
+13 affected pages/items grouped into clearer root causes.
+
+Open full issues workspace
+SEO issue
+
+AutoSEO found a repeated SEO signal that needs review.
+
+4 affected
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+Fix workflow
+
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Needs setup
+AI key required
+Permission: advanced_token
+View exact fix steps
+SEO issue
+
+AutoSEO found a repeated SEO signal that needs review.
+
+4 affected
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+https://aymen-kh.vercel.app/
+
+AI SaaS and full-stack developer building production SaaS platforms, AI integrations, automation systems, and web/mobile apps with React, Node.js, Python, OpenAI, and Groq.
+
+Fix workflow
+
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Needs setup
+AI key required
+Permission: advanced_token
+View exact fix steps
+SEO issue
+
+AutoSEO found a repeated SEO signal that needs review.
+
+4 affected
+Why it matters
+
+Repeated or invalid signals can reduce crawl quality, ranking clarity, or search-result quality.
+
+Recommended fix
+
+Review the affected URLs and update the underlying template, CMS field, or route metadata.
+
+Examples
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+https://aymen-kh.vercel.app/
+
+Fix workflow
+
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+Needs setup
+AI key required
+Permission: advanced_token
+View exact fix steps
+Missing sitemap.xml
+
+AutoSEO could not verify a public /sitemap.xml endpoint.
+
+1 affected
+Why it matters
+
+Sitemaps help discovery, freshness, and large-site crawl coverage.
+
+Recommended fix
+
+Publish a valid XML sitemap and reference it from robots.txt.
+
+Examples
+
+Site-wide issue
+
+/sitemap.xml returned 404
+
+Fix workflow
+
+Crawler and snippet modes can diagnose this root cause, but they cannot edit the site. GitHub PR fixing is available only after verification and a saved GitHub connection.
+
+GitHub PR ready
+AI key required
+Permission: advanced_token
+View exact fix steps
+Create GitHub PR
+Made with Replit
+
+
+Apollo
