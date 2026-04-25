@@ -1,7 +1,8 @@
 """Scheduled reports and on-demand report generation."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -12,9 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies import get_current_user, get_db
 from models.tables import (
+    AnalyticsPageMetric,
     Crawl,
+    GoogleAnalyticsConnection,
+    IndexNowKey,
     Issue,
     Page,
+    PageSpeedRun,
+    ReportShareLink,
     ScheduledReport,
     SearchConsoleConnection,
     SearchConsolePageMetric,
@@ -49,6 +55,12 @@ class ReportCreate(BaseModel):
 class ReportGenerateRequest(BaseModel):
     site_id: UUID
     crawl_id: Optional[UUID] = None
+
+
+class ReportShareRequest(BaseModel):
+    site_id: UUID
+    title: str = "SEO action report"
+    expires_in_days: int = Field(default=14, ge=1, le=90)
 
 
 @router.get("")
@@ -250,6 +262,43 @@ async def generate_report(
             ).where(SearchConsolePageMetric.site_id == site.id, SearchConsolePageMetric.org_id == auth.org_id)
         )
     ).one()
+    ga_connection = (
+        await db.execute(
+            select(GoogleAnalyticsConnection)
+            .where(GoogleAnalyticsConnection.site_id == site.id, GoogleAnalyticsConnection.org_id == auth.org_id)
+        )
+    ).scalar_one_or_none()
+    ga_totals = (
+        await db.execute(
+            select(
+                func.sum(AnalyticsPageMetric.sessions),
+                func.sum(AnalyticsPageMetric.key_events),
+                func.sum(AnalyticsPageMetric.total_revenue),
+                func.sum(AnalyticsPageMetric.transactions),
+            ).where(AnalyticsPageMetric.site_id == site.id, AnalyticsPageMetric.org_id == auth.org_id)
+        )
+    ).one()
+    pagespeed_totals = (
+        await db.execute(
+            select(
+                func.avg(PageSpeedRun.performance_score),
+                func.avg(PageSpeedRun.lcp_ms),
+                func.avg(PageSpeedRun.inp_ms),
+                func.avg(PageSpeedRun.cls_score),
+            ).where(PageSpeedRun.site_id == site.id, PageSpeedRun.org_id == auth.org_id, PageSpeedRun.status == "completed")
+        )
+    ).one()
+    latest_pagespeed = (
+        await db.execute(
+            select(PageSpeedRun)
+            .where(PageSpeedRun.site_id == site.id, PageSpeedRun.org_id == auth.org_id)
+            .order_by(PageSpeedRun.checked_at.desc())
+            .limit(5)
+        )
+    ).scalars().all()
+    indexnow_key = (
+        await db.execute(select(IndexNowKey).where(IndexNowKey.site_id == site.id, IndexNowKey.org_id == auth.org_id))
+    ).scalar_one_or_none()
     open_prs = int(
         (
             await db.execute(
@@ -292,6 +341,43 @@ async def generate_report(
                 "position": float(gsc_totals[3] or 0),
             },
         },
+        "analytics": {
+            "connected": bool(ga_connection),
+            "property_id": ga_connection.property_id if ga_connection else None,
+            "last_sync_at": ga_connection.last_sync_at.isoformat() if ga_connection and ga_connection.last_sync_at else None,
+            "totals": {
+                "sessions": float(ga_totals[0] or 0),
+                "key_events": float(ga_totals[1] or 0),
+                "total_revenue": float(ga_totals[2] or 0),
+                "transactions": float(ga_totals[3] or 0),
+            },
+        },
+        "pagespeed": {
+            "summary": {
+                "avg_performance_score": round(float(pagespeed_totals[0]), 1) if pagespeed_totals[0] is not None else None,
+                "avg_lcp_ms": round(float(pagespeed_totals[1]), 1) if pagespeed_totals[1] is not None else None,
+                "avg_inp_ms": round(float(pagespeed_totals[2]), 1) if pagespeed_totals[2] is not None else None,
+                "avg_cls_score": round(float(pagespeed_totals[3]), 4) if pagespeed_totals[3] is not None else None,
+            },
+            "latest_runs": [
+                {
+                    "page_url": row.page_url,
+                    "strategy": row.strategy,
+                    "status": row.status,
+                    "performance_score": row.performance_score,
+                    "lcp_ms": row.lcp_ms,
+                    "inp_ms": row.inp_ms,
+                    "cls_score": float(row.cls_score or 0) if row.cls_score is not None else None,
+                    "checked_at": row.checked_at.isoformat() if row.checked_at else None,
+                }
+                for row in latest_pagespeed
+            ],
+        },
+        "indexnow": {
+            "configured": bool(indexnow_key),
+            "verified": bool(indexnow_key and indexnow_key.verified),
+            "key_location": indexnow_key.key_location if indexnow_key else None,
+        },
         "github_fix_status": {
             "open_pr_issue_count": open_prs,
             "message": "GitHub PR-created issues remain open until a deploy and recrawl proves the root cause disappeared.",
@@ -310,4 +396,124 @@ async def generate_report(
         "export_ready": True,
         "note": "Raw issue totals can change when crawl limits or sampling change; use root-cause groups to judge whether the SEO problems changed.",
         "message": "Report data generated with root causes, affected pages, recommendations, and export-ready sections.",
+    }
+
+
+@router.get("/digest/preview")
+async def digest_preview(
+    site_id: Optional[UUID] = None,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    sites_query = select(Site).where(Site.org_id == auth.org_id)
+    if site_id:
+        sites_query = sites_query.where(Site.id == site_id)
+    sites = (await db.execute(sites_query.order_by(Site.created_at.desc()).limit(10))).scalars().all()
+
+    items = []
+    for site in sites:
+        latest_crawl = (
+            await db.execute(
+                select(Crawl)
+                .where(Crawl.site_id == site.id, Crawl.org_id == auth.org_id, Crawl.status == "completed")
+                .order_by(Crawl.completed_at.desc().nullslast(), Crawl.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        opportunities = await site_opportunities(db, site=site)
+        items.append({
+            "site_id": str(site.id),
+            "site_name": site.name,
+            "domain": site.domain,
+            "seo_score": latest_crawl.seo_score if latest_crawl else None,
+            "issues_found": latest_crawl.issues_found if latest_crawl else 0,
+            "pages_crawled": latest_crawl.pages_crawled if latest_crawl else 0,
+            "top_opportunities": opportunities["opportunities"][:5],
+            "next_action": opportunities["opportunities"][0] if opportunities["opportunities"] else None,
+        })
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "delivery_state": "preview_only",
+        "delivery_state_label": "Preview only",
+        "summary": {
+            "sites": len(items),
+            "open_opportunities": sum(len(item["top_opportunities"]) for item in items),
+        },
+        "sites": items,
+        "message": "Digest preview is available in-app. Email delivery becomes active when RESEND_API_KEY and the worker schedule are configured.",
+    }
+
+
+@router.post("/share-link")
+async def create_report_share_link(
+    data: ReportShareRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    site = (
+        await db.execute(select(Site).where(Site.id == data.site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    latest_crawl = (
+        await db.execute(
+            select(Crawl)
+            .where(Crawl.site_id == site.id, Crawl.org_id == auth.org_id, Crawl.status == "completed")
+            .order_by(Crawl.completed_at.desc().nullslast(), Crawl.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    opportunities = await site_opportunities(db, site=site)
+    snapshot = {
+        "site": {"id": str(site.id), "name": site.name, "domain": site.domain},
+        "latest_crawl": {
+            "seo_score": latest_crawl.seo_score,
+            "pages_crawled": latest_crawl.pages_crawled,
+            "issues_found": latest_crawl.issues_found,
+            "completed_at": latest_crawl.completed_at.isoformat() if latest_crawl.completed_at else None,
+        } if latest_crawl else None,
+        "top_opportunities": opportunities["opportunities"][:10],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    token = secrets.token_urlsafe(32)
+    link = ReportShareLink(
+        org_id=auth.org_id,
+        site_id=site.id,
+        token=token,
+        title=data.title,
+        snapshot=snapshot,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=data.expires_in_days),
+        created_by=auth.user_id,
+    )
+    db.add(link)
+    await db.commit()
+    await db.refresh(link)
+    return {
+        "id": str(link.id),
+        "token": link.token,
+        "share_url": f"/api/v1/reports/shared/{link.token}",
+        "expires_at": link.expires_at.isoformat() if link.expires_at else None,
+        "message": "Read-only report share link created. It exposes only the stored report snapshot, not credentials or live API access.",
+    }
+
+
+@router.get("/shared/{token}")
+async def read_report_share_link(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    link = (
+        await db.execute(select(ReportShareLink).where(ReportShareLink.token == token))
+    ).scalar_one_or_none()
+    if not link:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report link not found")
+    if link.expires_at and link.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Report link expired")
+    return {
+        "title": link.title,
+        "snapshot": link.snapshot,
+        "created_at": link.created_at.isoformat() if link.created_at else None,
+        "expires_at": link.expires_at.isoformat() if link.expires_at else None,
+        "read_only": True,
     }

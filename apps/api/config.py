@@ -95,10 +95,16 @@ class Settings(BaseSettings):
     GITHUB_APP_SLUG: str = ""
     GITHUB_WEBHOOK_SECRET: str = ""
 
-    # --- Google Search Console ---
+    # --- Google APIs ---
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
+    GOOGLE_ANALYTICS_REDIRECT_URI: str = ""
+    GOOGLE_PAGESPEED_API_KEY: str = ""
+    GOOGLE_CRUX_API_KEY: str = ""
+
+    # --- IndexNow ---
+    INDEXNOW_ENDPOINT: str = "https://api.indexnow.org/indexnow"
 
     # --- App ---
     FRONTEND_URL: str = "http://localhost:5173"

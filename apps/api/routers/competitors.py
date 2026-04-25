@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
-from models.tables import Competitor, Crawl
+from models.tables import Competitor, CompetitorPageComparison, Crawl, Page
 from packages.crawler.url_utils import is_safe_url
 from packages.shared.readiness import (
     READINESS_UNAVAILABLE_WITHOUT_PROVIDER,
@@ -24,6 +24,11 @@ class CompetitorCreate(BaseModel):
     site_id: UUID
     domain: str
     name: Optional[str] = None
+
+
+class CompetitorPageCompareRequest(BaseModel):
+    site_page_url: str
+    competitor_page_url: str
 
 
 @router.get("")
@@ -177,6 +182,112 @@ async def analyze_competitor(
             for issue in issues[:8]
         ],
         "message": "Lightweight competitor crawl completed. Keyword/backlink intelligence still requires a ranking/backlink data source.",
+    }
+
+
+def _compare_signals(site_signals: dict, competitor_signals: dict) -> list[dict]:
+    gaps = []
+    site_title = site_signals.get("title") or ""
+    comp_title = competitor_signals.get("title") or ""
+    if len(site_title) < 25 and len(comp_title) >= 25:
+        gaps.append({"type": "weak_title", "message": "Your page title is much shorter than the competitor title."})
+    site_meta = site_signals.get("meta_description") or ""
+    comp_meta = competitor_signals.get("meta_description") or ""
+    if len(site_meta) < 80 and len(comp_meta) >= 80:
+        gaps.append({"type": "weak_meta_description", "message": "Your meta description is thinner than the competitor page."})
+    site_schema = set(site_signals.get("schema_types") or [])
+    comp_schema = set(competitor_signals.get("schema_types") or [])
+    missing_schema = sorted(comp_schema - site_schema)
+    if missing_schema:
+        gaps.append({"type": "missing_schema_types", "message": "Competitor uses structured data types your page does not.", "missing": missing_schema})
+    site_words = int(site_signals.get("word_count") or 0)
+    comp_words = int(competitor_signals.get("word_count") or 0)
+    if comp_words >= 500 and site_words < comp_words * 0.65:
+        gaps.append({"type": "thin_content", "message": "Your page has substantially less indexable content than the competitor page.", "site_words": site_words, "competitor_words": comp_words})
+    if int(site_signals.get("internal_links_count") or 0) + 3 < int(competitor_signals.get("internal_links_count") or 0):
+        gaps.append({"type": "weaker_internal_linking", "message": "Competitor page has more internal links that may help discovery and authority flow."})
+    return gaps
+
+
+@router.post("/{competitor_id}/compare-pages")
+async def compare_competitor_pages(
+    competitor_id: UUID,
+    data: CompetitorPageCompareRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    competitor = (
+        await db.execute(
+            select(Competitor).where(Competitor.id == competitor_id, Competitor.org_id == auth.org_id)
+        )
+    ).scalar_one_or_none()
+    if not competitor:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+    if not is_safe_url(data.competitor_page_url):
+        raise HTTPException(status_code=400, detail="Competitor page failed safety validation")
+
+    site_page = (
+        await db.execute(
+            select(Page)
+            .where(Page.site_id == competitor.site_id, Page.org_id == auth.org_id, Page.url == data.site_page_url)
+            .order_by(Page.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if not site_page:
+        raise HTTPException(status_code=404, detail="Site page not found in crawl data. Run a crawl or choose a crawled URL.")
+
+    import httpx
+    from packages.crawler.extractor import SEOExtractor, calculate_page_score
+
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        response = await client.get(data.competitor_page_url, headers={"User-Agent": "AutoSEO/1.0 (+https://autoseo.app)"})
+    if not is_safe_url(str(response.url)):
+        raise HTTPException(status_code=400, detail="Competitor page redirected to an unsafe URL")
+
+    comp = SEOExtractor(response.text, str(response.url), headers=dict(response.headers)).extract_all()
+    comp["url"] = str(response.url)
+    comp["status_code"] = response.status_code
+    comp["seo_score"] = calculate_page_score(comp)
+    own = {
+        "url": site_page.url,
+        "title": site_page.title,
+        "meta_description": site_page.meta_description,
+        "schema_types": site_page.schema_types or [],
+        "word_count": site_page.word_count or 0,
+        "internal_links_count": site_page.internal_links_count or 0,
+        "seo_score": site_page.seo_score,
+    }
+    gaps = _compare_signals(own, comp)
+    record = CompetitorPageComparison(
+        org_id=auth.org_id,
+        site_id=competitor.site_id,
+        competitor_id=competitor.id,
+        site_page_url=site_page.url,
+        competitor_page_url=str(response.url),
+        site_score=site_page.seo_score,
+        competitor_score=comp.get("seo_score"),
+        gaps=gaps,
+        site_signals=own,
+        competitor_signals={
+            "title": comp.get("title"),
+            "meta_description": comp.get("meta_description"),
+            "schema_types": comp.get("schema_types") or [],
+            "word_count": comp.get("word_count"),
+            "internal_links_count": comp.get("internal_links_count"),
+        },
+    )
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return {
+        "id": str(record.id),
+        "site_page_url": record.site_page_url,
+        "competitor_page_url": record.competitor_page_url,
+        "site_score": record.site_score,
+        "competitor_score": record.competitor_score,
+        "gaps": gaps,
+        "message": "Page-vs-page competitor comparison completed. Keyword/backlink gaps still require a provider.",
     }
 
 

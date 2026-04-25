@@ -14,17 +14,25 @@ from schemas.auth import AuthContext
 from schemas.site import SiteCreate, SiteUpdate, SiteResponse, SiteListResponse
 from models.tables import (
     AiUsage,
+    AnalyticsPageMetric,
     Backlink,
     ChangeLog,
     Competitor,
+    CompetitorPageComparison,
     Crawl,
     FixVersion,
+    GoogleAnalyticsConnection,
+    GoogleAnalyticsSyncRun,
+    IndexNowKey,
+    IndexNowSubmission,
     Issue,
     IssueComment,
     Keyword,
     KeywordRanking,
     Page,
     PageSource,
+    PageSpeedRun,
+    ReportShareLink,
     ScheduledReport,
     SearchConsoleConnection,
     SearchConsoleInspection,
@@ -102,6 +110,9 @@ async def _delete_site_records(db: AsyncSession, site_id: UUID, org_id: UUID) ->
         "keywords": _delete_count(
             await db.execute(delete(Keyword).where(Keyword.site_id == site_id, Keyword.org_id == org_id))
         ),
+        "competitor_page_comparisons": _delete_count(
+            await db.execute(delete(CompetitorPageComparison).where(CompetitorPageComparison.site_id == site_id, CompetitorPageComparison.org_id == org_id))
+        ),
         "competitors": _delete_count(
             await db.execute(delete(Competitor).where(Competitor.site_id == site_id, Competitor.org_id == org_id))
         ),
@@ -134,6 +145,27 @@ async def _delete_site_records(db: AsyncSession, site_id: UUID, org_id: UUID) ->
         ),
         "search_console_connections": _delete_count(
             await db.execute(delete(SearchConsoleConnection).where(SearchConsoleConnection.site_id == site_id, SearchConsoleConnection.org_id == org_id))
+        ),
+        "analytics_page_metrics": _delete_count(
+            await db.execute(delete(AnalyticsPageMetric).where(AnalyticsPageMetric.site_id == site_id, AnalyticsPageMetric.org_id == org_id))
+        ),
+        "google_analytics_sync_runs": _delete_count(
+            await db.execute(delete(GoogleAnalyticsSyncRun).where(GoogleAnalyticsSyncRun.site_id == site_id, GoogleAnalyticsSyncRun.org_id == org_id))
+        ),
+        "google_analytics_connections": _delete_count(
+            await db.execute(delete(GoogleAnalyticsConnection).where(GoogleAnalyticsConnection.site_id == site_id, GoogleAnalyticsConnection.org_id == org_id))
+        ),
+        "pagespeed_runs": _delete_count(
+            await db.execute(delete(PageSpeedRun).where(PageSpeedRun.site_id == site_id, PageSpeedRun.org_id == org_id))
+        ),
+        "indexnow_submissions": _delete_count(
+            await db.execute(delete(IndexNowSubmission).where(IndexNowSubmission.site_id == site_id, IndexNowSubmission.org_id == org_id))
+        ),
+        "indexnow_keys": _delete_count(
+            await db.execute(delete(IndexNowKey).where(IndexNowKey.site_id == site_id, IndexNowKey.org_id == org_id))
+        ),
+        "report_share_links": _delete_count(
+            await db.execute(delete(ReportShareLink).where(ReportShareLink.site_id == site_id, ReportShareLink.org_id == org_id))
         ),
         "issues": _delete_count(
             await db.execute(delete(Issue).where(Issue.site_id == site_id, Issue.org_id == org_id))
@@ -328,6 +360,35 @@ async def get_site_summary(
             ).where(SearchConsolePageMetric.site_id == site_id, SearchConsolePageMetric.org_id == auth.org_id)
         )
     ).one()
+    analytics_connection = (
+        await db.execute(
+            select(GoogleAnalyticsConnection)
+            .where(GoogleAnalyticsConnection.site_id == site_id, GoogleAnalyticsConnection.org_id == auth.org_id)
+        )
+    ).scalar_one_or_none()
+    analytics_totals = (
+        await db.execute(
+            select(
+                func.sum(AnalyticsPageMetric.sessions),
+                func.sum(AnalyticsPageMetric.key_events),
+                func.sum(AnalyticsPageMetric.total_revenue),
+                func.sum(AnalyticsPageMetric.transactions),
+            ).where(AnalyticsPageMetric.site_id == site_id, AnalyticsPageMetric.org_id == auth.org_id)
+        )
+    ).one()
+    pagespeed_totals = (
+        await db.execute(
+            select(
+                func.avg(PageSpeedRun.performance_score),
+                func.avg(PageSpeedRun.lcp_ms),
+                func.avg(PageSpeedRun.inp_ms),
+                func.avg(PageSpeedRun.cls_score),
+            ).where(PageSpeedRun.site_id == site_id, PageSpeedRun.org_id == auth.org_id, PageSpeedRun.status == "completed")
+        )
+    ).one()
+    indexnow_key = (
+        await db.execute(select(IndexNowKey).where(IndexNowKey.site_id == site_id, IndexNowKey.org_id == auth.org_id))
+    ).scalar_one_or_none()
 
     return {
         "site": SiteResponse.model_validate(site).model_dump(mode="json"),
@@ -372,6 +433,29 @@ async def get_site_summary(
                 "ctr": float(gsc_totals[2] or 0),
                 "position": float(gsc_totals[3] or 0),
             },
+        },
+        "analytics": {
+            "connected": bool(analytics_connection),
+            "property_id": analytics_connection.property_id if analytics_connection else None,
+            "property_name": analytics_connection.property_name if analytics_connection else None,
+            "last_sync_at": analytics_connection.last_sync_at.isoformat() if analytics_connection and analytics_connection.last_sync_at else None,
+            "totals": {
+                "sessions": float(analytics_totals[0] or 0),
+                "key_events": float(analytics_totals[1] or 0),
+                "total_revenue": float(analytics_totals[2] or 0),
+                "transactions": float(analytics_totals[3] or 0),
+            },
+        },
+        "pagespeed": {
+            "avg_performance_score": round(float(pagespeed_totals[0]), 1) if pagespeed_totals[0] is not None else None,
+            "avg_lcp_ms": round(float(pagespeed_totals[1]), 1) if pagespeed_totals[1] is not None else None,
+            "avg_inp_ms": round(float(pagespeed_totals[2]), 1) if pagespeed_totals[2] is not None else None,
+            "avg_cls_score": round(float(pagespeed_totals[3]), 4) if pagespeed_totals[3] is not None else None,
+        },
+        "indexnow": {
+            "configured": bool(indexnow_key),
+            "verified": bool(indexnow_key and indexnow_key.verified),
+            "key_location": indexnow_key.key_location if indexnow_key else None,
         },
         "audit_note": "Raw issue totals can move up or down when crawl coverage changes; use grouped root causes to judge whether the underlying SEO problems actually changed.",
     }

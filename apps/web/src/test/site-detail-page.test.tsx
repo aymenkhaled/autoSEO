@@ -15,6 +15,10 @@ const installCodeMock = vi.fn()
 const snippetInsightsMock = vi.fn()
 const searchConsoleStatusMock = vi.fn()
 const searchConsolePerformanceMock = vi.fn()
+const analyticsStatusMock = vi.fn()
+const analyticsPerformanceMock = vi.fn()
+const pageSpeedListMock = vi.fn()
+const indexNowStatusMock = vi.fn()
 const opportunitiesSiteMock = vi.fn()
 const apiGetMock = vi.fn()
 
@@ -43,6 +47,21 @@ vi.mock('@/lib/api-client', () => ({
     performance: (...args: any[]) => searchConsolePerformanceMock(...args),
     connectUrl: vi.fn(),
     sync: vi.fn(),
+  },
+  analyticsApi: {
+    status: (...args: any[]) => analyticsStatusMock(...args),
+    performance: (...args: any[]) => analyticsPerformanceMock(...args),
+    connectUrl: vi.fn(),
+    sync: vi.fn(),
+  },
+  pageSpeedApi: {
+    list: (...args: any[]) => pageSpeedListMock(...args),
+    run: vi.fn(),
+  },
+  indexNowApi: {
+    status: (...args: any[]) => indexNowStatusMock(...args),
+    setup: vi.fn(),
+    submit: vi.fn(),
   },
   opportunitiesApi: {
     site: (...args: any[]) => opportunitiesSiteMock(...args),
@@ -137,6 +156,10 @@ describe('SiteDetailPage workspace tabs', () => {
     snippetInsightsMock.mockResolvedValue({ status: 'no_data', insights: [] })
     searchConsoleStatusMock.mockResolvedValue({ connected: false, configured: false, totals: { impressions: 0, clicks: 0, ctr: 0 } })
     searchConsolePerformanceMock.mockResolvedValue({ totals: { impressions: 0, clicks: 0, ctr: 0 } })
+    analyticsStatusMock.mockResolvedValue({ connected: false, configured: false, totals: { sessions: 0, key_events: 0, total_revenue: 0 } })
+    analyticsPerformanceMock.mockResolvedValue({ totals: { sessions: 0, key_events: 0, total_revenue: 0 } })
+    pageSpeedListMock.mockResolvedValue({ summary: {}, runs: [] })
+    indexNowStatusMock.mockResolvedValue({ configured: false, verified: false })
     opportunitiesSiteMock.mockResolvedValue({ opportunities: [] })
     apiGetMock.mockImplementation((path: string) => {
       if (path === 'sites/site-123/pages') return { json: async () => ({ pages: [], crawl_context: { monitoring_mode: 'crawler' } }) }

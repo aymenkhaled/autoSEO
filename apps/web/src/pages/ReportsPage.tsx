@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AlertTriangle, Calendar, Download, FileText, Globe, Mail, Plus, X } from 'lucide-react'
+import { AlertTriangle, Calendar, Download, ExternalLink, FileText, Globe, Mail, Plus, X } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
@@ -30,6 +30,14 @@ export default function ReportsPage() {
     mutationFn: (siteId: string) => reportsApi.generate({ site_id: siteId }),
     onSuccess: () => toast.success('Report generated with root causes'),
   })
+  const digestPreview = useMutation({
+    mutationFn: (siteId?: string) => reportsApi.digestPreview(siteId || undefined),
+    onSuccess: () => toast.success('Digest preview generated'),
+  })
+  const shareLink = useMutation({
+    mutationFn: (siteId: string) => reportsApi.shareLink({ site_id: siteId, title: 'SEO action report' }),
+    onSuccess: () => toast.success('Read-only report link created'),
+  })
 
   const sites = sitesData?.sites ?? []
   const reports = reportsData?.reports ?? []
@@ -37,6 +45,8 @@ export default function ReportsPage() {
   const [selectedSiteId, setSelectedSiteId] = useState('')
   const [form, setForm] = useState({ name: '', site_id: '', type: 'weekly', format: 'pdf', recipients: '' })
   const report = generateReport.data
+  const digest = digestPreview.data as any
+  const shared = shareLink.data as any
   const reportReadiness = readiness?.features?.reports
 
   const handleCreate = async (event: React.FormEvent) => {
@@ -105,7 +115,46 @@ export default function ReportsPage() {
               <Download className="h-4 w-4" />
               {generateReport.isPending ? 'Generating...' : 'Generate'}
             </button>
+            <button onClick={() => digestPreview.mutate(selectedSiteId || undefined)}
+              disabled={digestPreview.isPending}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+              <Mail className="h-4 w-4" />
+              {digestPreview.isPending ? 'Building...' : 'Digest Preview'}
+            </button>
+            <button onClick={() => selectedSiteId && shareLink.mutate(selectedSiteId)}
+              disabled={!selectedSiteId || shareLink.isPending}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+              <ExternalLink className="h-4 w-4" />
+              {shareLink.isPending ? 'Creating...' : 'Share Link'}
+            </button>
           </div>
+
+          {shared?.share_url && (
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <p className="text-xs font-semibold text-foreground">Read-only share link</p>
+              <code className="block text-[11px] text-muted-foreground mt-1 break-all">{shared.share_url}</code>
+            </div>
+          )}
+
+          {digest?.sites && (
+            <div className="rounded-xl border border-border bg-background p-4">
+              <p className="text-sm font-semibold text-foreground">Weekly digest preview</p>
+              <p className="text-xs text-muted-foreground mt-1">{digest.message}</p>
+              <div className="grid lg:grid-cols-2 gap-3 mt-3">
+                {digest.sites.map((item: any) => (
+                  <div key={item.site_id} className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-xs font-semibold text-foreground">{item.site_name}</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Score {item.seo_score ?? '-'} · {item.pages_crawled ?? 0} pages · {item.issues_found ?? 0} raw issues
+                    </p>
+                    {item.next_action && (
+                      <p className="text-[11px] text-cyan-200 mt-2">Next: {item.next_action.title}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {report?.summary && (
             <div className="space-y-4">
@@ -151,6 +200,27 @@ export default function ReportsPage() {
                   <p className="text-xs text-muted-foreground mt-1">{report.github_fix_status?.message}</p>
                   <p className="text-3xl font-bold text-foreground mt-4">{report.github_fix_status?.open_pr_issue_count ?? 0}</p>
                   <p className="text-xs text-muted-foreground">PR-created issue rows awaiting deploy + recrawl proof</p>
+                </div>
+              </div>
+
+              <div className="grid lg:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">GA4 business impact</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {report.analytics?.connected ? `Property: ${report.analytics.property_id}` : 'GA4 is not connected yet.'}
+                  </p>
+                  <p className="text-2xl font-bold text-foreground mt-3">${Number(report.analytics?.totals?.total_revenue ?? 0).toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground">{Math.round(report.analytics?.totals?.sessions ?? 0).toLocaleString()} sessions · {report.analytics?.totals?.key_events ?? 0} key events</p>
+                </div>
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">PageSpeed</p>
+                  <p className="text-2xl font-bold text-foreground mt-3">{report.pagespeed?.summary?.avg_performance_score ?? '-'}</p>
+                  <p className="text-xs text-muted-foreground">Avg performance · LCP {report.pagespeed?.summary?.avg_lcp_ms ?? '-'}ms</p>
+                </div>
+                <div className="rounded-xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">IndexNow</p>
+                  <p className="text-2xl font-bold text-foreground mt-3">{report.indexnow?.verified ? 'Verified' : 'Setup needed'}</p>
+                  <p className="text-xs text-muted-foreground truncate">{report.indexnow?.key_location || 'Upload key file to enable post-fix URL submission.'}</p>
                 </div>
               </div>
 

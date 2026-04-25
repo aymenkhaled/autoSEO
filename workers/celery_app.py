@@ -49,4 +49,8 @@ app.conf.beat_schedule = {
         "task": "workers.tasks.crawl.refresh_expiring_tokens",
         "schedule": crontab(hour=1, minute=0),  # Every day at 1 AM UTC
     },
+    "scheduled-monitoring": {
+        "task": "workers.tasks.report.run_scheduled_monitoring",
+        "schedule": crontab(hour=3, minute=0),  # Every day at 3 AM UTC
+    },
 }

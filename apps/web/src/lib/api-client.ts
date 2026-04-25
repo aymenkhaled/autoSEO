@@ -169,6 +169,30 @@ export const searchConsoleApi = {
     api.get(`sites/${siteId}/search-console/performance`).json<any>(),
 }
 
+export const analyticsApi = {
+  connectUrl: (siteId: string, propertyId?: string) =>
+    api.get('google/analytics/connect-url', { searchParams: { site_id: siteId, ...(propertyId ? { property_id: propertyId } : {}) } }).json<any>(),
+  status: (siteId: string) =>
+    api.get(`sites/${siteId}/analytics/status`).json<any>(),
+  sync: (siteId: string, data: { days?: number } = {}) =>
+    api.post(`sites/${siteId}/analytics/sync`, { json: data }).json<any>(),
+  performance: (siteId: string) =>
+    api.get(`sites/${siteId}/analytics/performance`).json<any>(),
+}
+
+export const pageSpeedApi = {
+  list: (siteId: string) => api.get(`sites/${siteId}/pagespeed`).json<any>(),
+  run: (siteId: string, data: { urls?: string[]; strategies?: string[] } = {}) =>
+    api.post(`sites/${siteId}/pagespeed/run`, { json: data }).json<any>(),
+}
+
+export const indexNowApi = {
+  status: (siteId: string) => api.get(`sites/${siteId}/indexnow/status`).json<any>(),
+  setup: (siteId: string) => api.post(`sites/${siteId}/indexnow/setup`).json<any>(),
+  submit: (siteId: string, urls: string[]) =>
+    api.post(`sites/${siteId}/indexnow/submit`, { json: { urls } }).json<any>(),
+}
+
 export const opportunitiesApi = {
   site: (siteId: string) =>
     api.get(`sites/${siteId}/opportunities`).json<any>(),
@@ -180,6 +204,9 @@ export const reportsApi = {
   list: () => api.get('reports').json<any>(),
   create: (data: any) => api.post('reports', { json: data }).json<any>(),
   generate: (data: any) => api.post('reports/generate', { json: data }).json<any>(),
+  digestPreview: (siteId?: string) =>
+    api.get('reports/digest/preview', { searchParams: siteId ? { site_id: siteId } : {} }).json<any>(),
+  shareLink: (data: any) => api.post('reports/share-link', { json: data }).json<any>(),
 }
 
 export const notificationsApi = {
@@ -199,6 +226,8 @@ export const webhooksApi = {
 
 export const competitorsApi = {
   analyze: (id: string) => api.post(`competitors/${id}/analyze`).json<any>(),
+  comparePages: (id: string, data: { site_page_url: string; competitor_page_url: string }) =>
+    api.post(`competitors/${id}/compare-pages`, { json: data }).json<any>(),
 }
 
 // Alias for pages that import apiClient directly

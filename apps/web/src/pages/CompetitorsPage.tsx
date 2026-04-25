@@ -52,6 +52,15 @@ function useAnalyzeCompetitor() {
   })
 }
 
+function useCompareCompetitorPages() {
+  return useMutation({
+    mutationFn: ({ id, site_page_url, competitor_page_url }: { id: string; site_page_url: string; competitor_page_url: string }) =>
+      apiClient.post(`competitors/${id}/compare-pages`, { json: { site_page_url, competitor_page_url } }).json<any>(),
+    onSuccess: () => toast.success('Page comparison completed'),
+    onError: () => toast.error('Failed to compare pages'),
+  })
+}
+
 function ScoreBar({ score }: { score?: number }) {
   if (!score) return <span className="text-muted-foreground text-xs">Not analyzed</span>
   const color = score >= 70 ? 'bg-green-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500'
@@ -75,10 +84,19 @@ export default function CompetitorsPage() {
   const add = useAddCompetitor()
   const remove = useRemoveCompetitor()
   const analyze = useAnalyzeCompetitor()
+  const comparePages = useCompareCompetitorPages()
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ domain: '', name: '' })
+  const [compareForm, setCompareForm] = useState({ competitor_id: '', site_page_url: '', competitor_page_url: '' })
+  const pagesQuery = useQuery({
+    queryKey: ['competitor-site-pages', siteId],
+    queryFn: () => apiClient.get(`sites/${siteId}/pages`).json<any>(),
+    enabled: !!siteId,
+  })
 
   const competitors = data?.competitors ?? []
+  const pages = pagesQuery.data?.pages ?? []
+  const pageComparison = comparePages.data as any
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -120,6 +138,59 @@ export default function CompetitorsPage() {
         <p className="text-xs text-amber-100 leading-relaxed">
           Current status: <span className="font-semibold">Working for lightweight crawl comparison</span>, but keyword counts and backlinks still <span className="font-semibold">need a provider</span>.
         </p>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-foreground">Page-vs-page gap comparison</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Compare one crawled page against a competitor page for title, meta, schema, content depth, and internal-link gaps.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3">
+          <select value={compareForm.competitor_id} onChange={e => setCompareForm(f => ({ ...f, competitor_id: e.target.value }))}
+            className="h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none">
+            <option value="">Choose competitor</option>
+            {competitors.map((c: any) => <option key={c.id} value={c.id}>{c.name || c.domain}</option>)}
+          </select>
+          <select value={compareForm.site_page_url} onChange={e => setCompareForm(f => ({ ...f, site_page_url: e.target.value }))}
+            className="h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none">
+            <option value="">Choose your crawled page</option>
+            {pages.map((page: any) => <option key={page.id} value={page.url}>{page.url}</option>)}
+          </select>
+          <input value={compareForm.competitor_page_url} onChange={e => setCompareForm(f => ({ ...f, competitor_page_url: e.target.value }))}
+            placeholder="https://competitor.com/page"
+            className="h-9 px-3 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none" />
+        </div>
+        <button onClick={() => comparePages.mutate({
+          id: compareForm.competitor_id,
+          site_page_url: compareForm.site_page_url,
+          competitor_page_url: compareForm.competitor_page_url,
+        })} disabled={!compareForm.competitor_id || !compareForm.site_page_url || !compareForm.competitor_page_url || comparePages.isPending}
+          className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+          <BarChart2 className="h-4 w-4" />
+          {comparePages.isPending ? 'Comparing...' : 'Compare Pages'}
+        </button>
+        {pageComparison && (
+          <div className="rounded-lg border border-border bg-background p-4">
+            <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+              <div><span className="text-muted-foreground">Your score</span><p className="text-xl font-bold text-foreground">{pageComparison.site_score ?? '-'}</p></div>
+              <div><span className="text-muted-foreground">Competitor score</span><p className="text-xl font-bold text-foreground">{pageComparison.competitor_score ?? '-'}</p></div>
+            </div>
+            {(pageComparison.gaps ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">No obvious page gaps detected.</p>
+            ) : (
+              <div className="space-y-2">
+                {pageComparison.gaps.map((gap: any) => (
+                  <div key={gap.type} className="rounded-md bg-muted/40 px-3 py-2">
+                    <p className="text-xs font-semibold text-foreground">{gap.type.replaceAll('_', ' ')}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{gap.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <AnimatePresence>

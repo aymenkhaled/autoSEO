@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Target, TrendingUp, TrendingDown, Minus, Globe, Trash2, X, ChevronDown, Info } from 'lucide-react'
+import { Plus, Target, TrendingUp, TrendingDown, Minus, Globe, Trash2, X, ChevronDown, Info, Upload } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
 import { useSites } from '@/hooks/use-data'
@@ -39,6 +39,18 @@ function useDeleteKeyword() {
   })
 }
 
+function useImportKeywordRankings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: any) => apiClient.post('keywords/import', { json: data }).json<any>(),
+    onSuccess: (result, vars) => {
+      qc.invalidateQueries({ queryKey: ['keywords', vars.site_id] })
+      toast.success(result.message || 'Keyword rankings imported')
+    },
+    onError: () => toast.error('Failed to import keyword rankings'),
+  })
+}
+
 const INTENT_LABELS: Record<string, { label: string; color: string }> = {
   informational: { label: 'Informational', color: 'text-blue-500 bg-blue-500/10 border-blue-500/20' },
   navigational: { label: 'Navigational', color: 'text-purple-500 bg-purple-500/10 border-purple-500/20' },
@@ -63,8 +75,10 @@ export default function KeywordsPage() {
   const { data, isLoading } = useKeywords(siteId)
   const addKw = useAddKeyword()
   const deleteKw = useDeleteKeyword()
+  const importRankings = useImportKeywordRankings()
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ keyword: '', target_url: '', intent: 'informational', priority: '1' })
+  const [csvText, setCsvText] = useState('')
 
   const keywords = data?.keywords ?? []
 
@@ -74,6 +88,12 @@ export default function KeywordsPage() {
     await addKw.mutateAsync({ ...form, site_id: siteId, priority: parseInt(form.priority) })
     setForm({ keyword: '', target_url: '', intent: 'informational', priority: '1' })
     setShowAdd(false)
+  }
+
+  const handleImport = async () => {
+    if (!siteId || !csvText.trim()) return
+    await importRankings.mutateAsync({ site_id: siteId, csv_text: csvText })
+    setCsvText('')
   }
 
   return (
@@ -109,6 +129,28 @@ export default function KeywordsPage() {
         <p className="text-xs text-amber-100 leading-relaxed">
           Current status: <span className="font-semibold">Tracking only</span>. Keywords are stored and organized by site, intent, and priority. Ranking history stays empty until a SERP provider or manual ranking import is connected.
         </p>
+      </div>
+
+      <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Manual ranking CSV import</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Use this before a paid SERP provider. Columns: keyword, position, previous_position, volume, url, country, device, date.
+            </p>
+          </div>
+          <button onClick={handleImport} disabled={!csvText.trim() || importRankings.isPending}
+            className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+            <Upload className="h-4 w-4" />
+            {importRankings.isPending ? 'Importing...' : 'Import CSV'}
+          </button>
+        </div>
+        <textarea
+          value={csvText}
+          onChange={(event) => setCsvText(event.target.value)}
+          placeholder={`keyword,position,previous_position,volume,url,country,device,date\nseo automation,8,11,1200,https://example.com/seo,US,desktop,2026-04-25`}
+          className="w-full min-h-[96px] rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground font-mono focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
       </div>
 
       {/* Add keyword modal */}

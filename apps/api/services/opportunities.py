@@ -7,8 +7,18 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.tables import Issue, Page, SearchConsoleInspection, SearchConsolePageMetric, Site, SiteOpportunity
-from packages.shared.priority_engine import GscImpact, score_group
+from models.tables import (
+    AnalyticsPageMetric,
+    IndexNowKey,
+    Issue,
+    Page,
+    PageSpeedRun,
+    SearchConsoleInspection,
+    SearchConsolePageMetric,
+    Site,
+    SiteOpportunity,
+)
+from packages.shared.priority_engine import GscImpact, RevenueImpact, score_group
 from packages.shared.readiness import connection_status_payload
 from packages.shared.seo_domain import issue_is_auto_fixable
 from services.snippet_insights import compute_snippet_insights
@@ -39,8 +49,34 @@ async def page_gsc_impact(db: AsyncSession, *, site: Site) -> dict[str, GscImpac
     }
 
 
+async def page_revenue_impact(db: AsyncSession, *, site: Site) -> dict[str, RevenueImpact]:
+    rows = (
+        await db.execute(
+            select(
+                AnalyticsPageMetric.page_url,
+                func.sum(AnalyticsPageMetric.sessions),
+                func.sum(AnalyticsPageMetric.key_events),
+                func.sum(AnalyticsPageMetric.transactions),
+                func.sum(AnalyticsPageMetric.total_revenue),
+            )
+            .where(AnalyticsPageMetric.site_id == site.id, AnalyticsPageMetric.org_id == site.org_id)
+            .group_by(AnalyticsPageMetric.page_url)
+        )
+    ).all()
+    return {
+        page_url: RevenueImpact(
+            sessions=float(sessions or 0),
+            key_events=float(key_events or 0),
+            transactions=float(transactions or 0),
+            revenue=float(revenue or 0),
+        )
+        for page_url, sessions, key_events, transactions, revenue in rows
+    }
+
+
 async def issue_priorities(db: AsyncSession, *, site: Site, fix_status: str = "pending") -> list[dict[str, Any]]:
     page_impact = await page_gsc_impact(db, site=site)
+    page_revenue = await page_revenue_impact(db, site=site)
     connection = connection_status_payload(site)
     rows = (
         await db.execute(
@@ -63,6 +99,7 @@ async def issue_priorities(db: AsyncSession, *, site: Site, fix_status: str = "p
                 "total_impact": 0,
                 "sample_urls": [],
                 "gsc": GscImpact(),
+                "revenue": RevenueImpact(),
             },
         )
         group["affected_count"] += 1
@@ -78,6 +115,15 @@ async def issue_priorities(db: AsyncSession, *, site: Site, fix_status: str = "p
                 ctr=max(current.ctr, extra.ctr),
                 position=extra.position or current.position,
             )
+        if page_url in page_revenue:
+            current_revenue = group["revenue"]
+            extra_revenue = page_revenue[page_url]
+            group["revenue"] = RevenueImpact(
+                sessions=current_revenue.sessions + extra_revenue.sessions,
+                key_events=current_revenue.key_events + extra_revenue.key_events,
+                transactions=current_revenue.transactions + extra_revenue.transactions,
+                revenue=current_revenue.revenue + extra_revenue.revenue,
+            )
 
     out = []
     fix_ready = bool(connection.get("auto_deploy_capable") and connection.get("write_integration_configured"))
@@ -88,8 +134,9 @@ async def issue_priorities(db: AsyncSession, *, site: Site, fix_status: str = "p
             affected_count=group["affected_count"],
             fix_ready=fix_ready or issue_is_auto_fixable(group["type"]),
             gsc=group["gsc"],
+            revenue=group["revenue"],
         )
-        out.append({**{k: v for k, v in group.items() if k != "gsc"}, **score})
+        out.append({**{k: v for k, v in group.items() if k not in {"gsc", "revenue"}}, **score})
     return sorted(out, key=lambda item: item["priority_score"], reverse=True)
 
 
@@ -135,6 +182,97 @@ async def site_opportunities(db: AsyncSession, *, site: Site) -> dict[str, Any]:
                 "impact_label": "Ranking opportunity",
                 "data": {"clicks": float(metric.clicks or 0), "impressions": impressions, "ctr": ctr, "position": position},
             })
+
+    analytics_rows = (
+        await db.execute(
+            select(AnalyticsPageMetric)
+            .where(AnalyticsPageMetric.site_id == site.id, AnalyticsPageMetric.org_id == site.org_id)
+            .order_by(AnalyticsPageMetric.total_revenue.desc(), AnalyticsPageMetric.key_events.desc(), AnalyticsPageMetric.sessions.desc())
+            .limit(100)
+        )
+    ).scalars().all()
+    for metric in analytics_rows:
+        revenue = float(metric.total_revenue or 0)
+        key_events = float(metric.key_events or 0)
+        sessions = float(metric.sessions or 0)
+        if revenue >= 50 or key_events >= 5:
+            opportunities.append({
+                "source": "ga4",
+                "type": "revenue_page_with_seo_upside",
+                "title": "Revenue page deserves SEO priority",
+                "description": "This page already produces conversions or revenue. SEO issues here should usually beat low-traffic technical cleanup.",
+                "affected_url": metric.page_url,
+                "priority_score": min(300, 175 + int(revenue / 20) + int(key_events * 6)),
+                "impact_label": "Revenue impact",
+                "data": {
+                    "sessions": sessions,
+                    "key_events": key_events,
+                    "transactions": float(metric.transactions or 0),
+                    "total_revenue": revenue,
+                    "engagement_rate": float(metric.engagement_rate or 0),
+                },
+            })
+        elif sessions >= 500 and key_events <= 1:
+            opportunities.append({
+                "source": "ga4",
+                "type": "traffic_without_conversion",
+                "title": "Traffic is not converting",
+                "description": "This landing page gets sessions but few key events. Improve intent match, CTA clarity, speed, and metadata before scaling traffic.",
+                "affected_url": metric.page_url,
+                "priority_score": min(240, 120 + int(sessions / 100)),
+                "impact_label": "Conversion gap",
+                "data": {"sessions": sessions, "key_events": key_events, "total_revenue": revenue},
+            })
+
+    pagespeed_rows = (
+        await db.execute(
+            select(PageSpeedRun)
+            .where(PageSpeedRun.site_id == site.id, PageSpeedRun.org_id == site.org_id, PageSpeedRun.status == "completed")
+            .order_by(PageSpeedRun.checked_at.desc())
+            .limit(50)
+        )
+    ).scalars().all()
+    seen_pagespeed = set()
+    for run in pagespeed_rows:
+        key = (run.page_url, run.strategy)
+        if key in seen_pagespeed:
+            continue
+        seen_pagespeed.add(key)
+        score = run.performance_score if run.performance_score is not None else 100
+        if score < 70 or (run.lcp_ms and run.lcp_ms > 2500) or (run.cls_score and float(run.cls_score) > 0.1):
+            opportunities.append({
+                "source": "pagespeed",
+                "type": "core_web_vitals_risk",
+                "title": "PageSpeed/Core Web Vitals risk",
+                "description": "Google PageSpeed found poor performance or Core Web Vitals risk. Prioritize mobile issues on pages with GSC or GA4 value.",
+                "affected_url": run.page_url,
+                "priority_score": min(260, 120 + max(0, 90 - int(score)) * 2),
+                "impact_label": f"{run.strategy.title()} performance",
+                "data": {
+                    "strategy": run.strategy,
+                    "performance_score": run.performance_score,
+                    "lcp_ms": run.lcp_ms,
+                    "inp_ms": run.inp_ms,
+                    "cls_score": float(run.cls_score or 0) if run.cls_score is not None else None,
+                    "opportunities": run.opportunities or [],
+                    "crux_metrics": run.crux_metrics or {},
+                },
+            })
+
+    indexnow_key = (
+        await db.execute(select(IndexNowKey).where(IndexNowKey.site_id == site.id, IndexNowKey.org_id == site.org_id))
+    ).scalar_one_or_none()
+    if not indexnow_key or not indexnow_key.verified:
+        opportunities.append({
+            "source": "indexnow",
+            "type": "indexnow_setup_missing",
+            "title": "Set up post-fix indexing notifications",
+            "description": "After fixes are merged and deployed, IndexNow can notify supported search engines about changed URLs. Upload the key file to unlock submissions.",
+            "affected_url": site.domain,
+            "priority_score": 75,
+            "impact_label": "Post-fix proof",
+            "data": {"configured": bool(indexnow_key), "verified": bool(indexnow_key and indexnow_key.verified)},
+        })
 
     crawl_pages = {
         row[0].rstrip("/")
@@ -236,5 +374,5 @@ async def site_opportunities(db: AsyncSession, *, site: Site) -> dict[str, Any]:
         "total": len(opportunities),
         "by_source": dict(by_source),
         "snippet_status": snippet["status"],
-        "message": "Opportunities combine crawler root causes, Search Console demand, URL inspection, and runtime snippet signals.",
+        "message": "Opportunities combine crawler root causes, Search Console demand, GA4 revenue/conversions, PageSpeed/CrUX, IndexNow readiness, URL inspection, and runtime snippet signals.",
     }

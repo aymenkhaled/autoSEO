@@ -126,6 +126,19 @@ Open [http://127.0.0.1:8001](http://127.0.0.1:8001).
 9. Open `Reports`, `Team`, and `Billing` and confirm readiness states are honest.
 10. Create an API key and call the API from the examples shown in the UI.
 
+### Diamond business-impact flow
+
+1. Crawl a site first so AutoSEO has pages and grouped root causes.
+2. Open the site `Setup` tab and connect Search Console for clicks, impressions, CTR, and indexing.
+3. Connect GA4 by opening the GA4 connect URL, then complete the callback with the numeric GA4 property ID.
+4. Run `Sync 90 days` for Search Console and GA4.
+5. Run `PageSpeed` for mobile/desktop checks on the top pages.
+6. Prepare `IndexNow`, upload the generated key file to the site root, then run setup again to verify it.
+7. Open the site `Audit` tab and confirm `Next best opportunities` now mixes crawler issues, GSC demand, GA4 revenue, PageSpeed/Core Web Vitals, and IndexNow readiness.
+8. Open `Reports`, generate an on-demand report, then use `Digest Preview` and `Share Link` to review the weekly client-facing action summary.
+9. Open `Keywords`, paste a CSV with `keyword,position,previous_position,volume,url,country,device,date`, and confirm ranking history appears.
+10. Open `Competitors`, add a competitor, then run page-vs-page comparison against one crawled page.
+
 ### AI-powered GitHub PR flow
 
 1. Add a site and run a crawl.
@@ -156,5 +169,8 @@ npm run build
 ## Notes
 
 - Redis is optional for basic browsing, but background workers and queue-backed flows use it when available.
-- Stripe checkout/portal, report delivery, and invite delivery remain intentionally deferred until they are fully wired.
+- Stripe checkout/portal, PDF rendering, and invite delivery remain intentionally deferred until they are fully wired. Weekly digest email can send through Resend when `RESEND_API_KEY` is configured and workers are running.
 - AI fix generation requires `ANTHROPIC_API_KEY`. Without it, the app now shows readiness states instead of fake placeholder fixes.
+- GA4 uses the Google Analytics Data API with read-only `analytics.readonly` scope. Search Console remains read-only too.
+- PageSpeed checks use the PageSpeed Insights endpoint and optional CrUX API key for real-user field metrics.
+- IndexNow submissions stay blocked until the generated key file is publicly verified on the site host.

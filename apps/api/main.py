@@ -135,6 +135,9 @@ from routers.reports import router as reports_router
 from routers.system import router as system_router
 from routers.github import router as github_router
 from routers.search_console import router as search_console_router
+from routers.google_analytics import router as google_analytics_router
+from routers.pagespeed import router as pagespeed_router
+from routers.indexnow import router as indexnow_router
 
 _ROUTERS = [
     (auth_router, "/auth"),
@@ -158,6 +161,9 @@ _ROUTERS = [
     (system_router, "/system"),
     (github_router, ""),
     (search_console_router, ""),
+    (google_analytics_router, ""),
+    (pagespeed_router, ""),
+    (indexnow_router, ""),
 ]
 
 for base_prefix in ("", "/api", "/api/v1"):

@@ -747,3 +747,199 @@ class SnippetInsight(Base):
     __table_args__ = (
         Index("idx_snippet_insights_site_type", "site_id", "insight_type"),
     )
+
+
+class GoogleAnalyticsConnection(Base):
+    __tablename__ = "google_analytics_connections"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    property_id = Column(Text, nullable=False)
+    property_name = Column(Text)
+    token_encrypted = Column(Text, nullable=False)
+    token_iv = Column(Text, nullable=False)
+    scopes = Column(ARRAY(Text), nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    connected_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    last_sync_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_google_analytics_connections_site", "site_id", unique=True),
+        Index("idx_google_analytics_connections_org", "org_id"),
+    )
+
+
+class GoogleAnalyticsSyncRun(Base):
+    __tablename__ = "google_analytics_sync_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    connection_id = Column(UUID(as_uuid=True), ForeignKey("google_analytics_connections.id"))
+    status = Column(Text, nullable=False, default="running")
+    days = Column(Integer, nullable=False, default=90)
+    rows_synced = Column(Integer, nullable=False, default=0)
+    error_message = Column(Text)
+    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_google_analytics_sync_runs_site", "site_id", "created_at"),
+    )
+
+
+class AnalyticsPageMetric(Base):
+    __tablename__ = "analytics_page_metrics"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    sync_run_id = Column(UUID(as_uuid=True), ForeignKey("google_analytics_sync_runs.id"))
+    page_url = Column(Text, nullable=False)
+    date_start = Column(Text, nullable=False)
+    date_end = Column(Text, nullable=False)
+    sessions = Column(Numeric(12, 2), nullable=False, default=0)
+    active_users = Column(Numeric(12, 2), nullable=False, default=0)
+    views = Column(Numeric(12, 2), nullable=False, default=0)
+    key_events = Column(Numeric(12, 2), nullable=False, default=0)
+    total_revenue = Column(Numeric(12, 2), nullable=False, default=0)
+    transactions = Column(Numeric(12, 2), nullable=False, default=0)
+    engagement_rate = Column(Numeric(8, 6), nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_analytics_page_metrics_site_page", "site_id", "page_url"),
+        Index("idx_analytics_page_metrics_site_revenue", "site_id", "total_revenue"),
+    )
+
+
+class PageSpeedRun(Base):
+    __tablename__ = "pagespeed_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    page_url = Column(Text, nullable=False)
+    strategy = Column(Text, nullable=False, default="mobile")
+    status = Column(Text, nullable=False, default="running")
+    performance_score = Column(SmallInteger)
+    accessibility_score = Column(SmallInteger)
+    best_practices_score = Column(SmallInteger)
+    seo_score = Column(SmallInteger)
+    lcp_ms = Column(Integer)
+    inp_ms = Column(Integer)
+    cls_score = Column(Numeric(6, 4))
+    fcp_ms = Column(Integer)
+    ttfb_ms = Column(Integer)
+    total_blocking_time_ms = Column(Integer)
+    speed_index_ms = Column(Integer)
+    opportunities = Column(JSONB)
+    diagnostics = Column(JSONB)
+    crux_metrics = Column(JSONB)
+    screenshot = Column(Text)
+    error_message = Column(Text)
+    checked_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_pagespeed_runs_site_url", "site_id", "page_url", "strategy"),
+        Index("idx_pagespeed_runs_site_checked", "site_id", "checked_at"),
+    )
+
+
+class IndexNowKey(Base):
+    __tablename__ = "indexnow_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    key = Column(Text, nullable=False)
+    key_location = Column(Text, nullable=False)
+    verified = Column(Boolean, nullable=False, default=False)
+    last_verified_at = Column(DateTime(timezone=True))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_indexnow_keys_site", "site_id", unique=True),
+    )
+
+
+class IndexNowSubmission(Base):
+    __tablename__ = "indexnow_submissions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    key_id = Column(UUID(as_uuid=True), ForeignKey("indexnow_keys.id"))
+    urls = Column(ARRAY(Text), nullable=False)
+    status_code = Column(SmallInteger)
+    success = Column(Boolean)
+    response_body = Column(Text)
+    submitted_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_indexnow_submissions_site", "site_id", "created_at"),
+    )
+
+
+class CompetitorPageComparison(Base):
+    __tablename__ = "competitor_page_comparisons"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    competitor_id = Column(UUID(as_uuid=True), ForeignKey("competitors.id"), nullable=False)
+    site_page_url = Column(Text, nullable=False)
+    competitor_page_url = Column(Text, nullable=False)
+    site_score = Column(SmallInteger)
+    competitor_score = Column(SmallInteger)
+    gaps = Column(JSONB)
+    site_signals = Column(JSONB)
+    competitor_signals = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_competitor_page_comparisons_competitor", "competitor_id", "created_at"),
+    )
+
+
+class Client(Base):
+    __tablename__ = "clients"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    name = Column(Text, nullable=False)
+    contact_email = Column(Text)
+    brand_name = Column(Text)
+    logo_url = Column(Text)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_clients_org", "org_id"),
+    )
+
+
+class ReportShareLink(Base):
+    __tablename__ = "report_share_links"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    token = Column(Text, nullable=False, unique=True)
+    title = Column(Text, nullable=False)
+    snapshot = Column(JSONB, nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_report_share_links_site", "site_id", "created_at"),
+    )

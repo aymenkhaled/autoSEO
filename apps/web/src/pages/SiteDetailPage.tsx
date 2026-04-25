@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 
 import { DeleteSiteDialog } from '@/components/sites/DeleteSiteDialog'
-import { api, connectionsApi, issuesApi, opportunitiesApi, searchConsoleApi, sitesApi, snippetApi } from '@/lib/api-client'
+import { analyticsApi, api, connectionsApi, indexNowApi, issuesApi, opportunitiesApi, pageSpeedApi, searchConsoleApi, sitesApi, snippetApi } from '@/lib/api-client'
 import { SUPABASE_AUTH_ENABLED } from '@/lib/auth-mode'
 import { getLocalAccessToken } from '@/lib/auth-storage'
 import { readinessMeta } from '@/lib/readiness'
@@ -126,6 +126,7 @@ export default function SiteDetailPage() {
   const [showDelete, setShowDelete] = useState(false)
   const [crawlLimit, setCrawlLimit] = useState('500')
   const [workflowPanel, setWorkflowPanel] = useState<any | null>(null)
+  const [gaPropertyId, setGaPropertyId] = useState('')
 
   const siteQuery = useQuery({
     queryKey: ['site', id],
@@ -187,6 +188,30 @@ export default function SiteDetailPage() {
     enabled: !!id && !!searchConsoleStatusQuery.data?.connected,
   })
 
+  const analyticsStatusQuery = useQuery({
+    queryKey: ['analytics-status', id],
+    queryFn: () => analyticsApi.status(id!),
+    enabled: !!id,
+  })
+
+  const analyticsPerformanceQuery = useQuery({
+    queryKey: ['analytics-performance', id],
+    queryFn: () => analyticsApi.performance(id!),
+    enabled: !!id && !!analyticsStatusQuery.data?.connected,
+  })
+
+  const pageSpeedQuery = useQuery({
+    queryKey: ['pagespeed', id],
+    queryFn: () => pageSpeedApi.list(id!),
+    enabled: !!id,
+  })
+
+  const indexNowQuery = useQuery({
+    queryKey: ['indexnow', id],
+    queryFn: () => indexNowApi.status(id!),
+    enabled: !!id,
+  })
+
   const opportunitiesQuery = useQuery({
     queryKey: ['site-opportunities', id],
     queryFn: () => opportunitiesApi.site(id!),
@@ -227,6 +252,12 @@ export default function SiteDetailPage() {
       setCrawlLimit(String(siteQuery.data.crawl_max_pages))
     }
   }, [siteQuery.data?.crawl_max_pages])
+
+  useEffect(() => {
+    if (analyticsStatusQuery.data?.property_id && !gaPropertyId) {
+      setGaPropertyId(String(analyticsStatusQuery.data.property_id))
+    }
+  }, [analyticsStatusQuery.data?.property_id, gaPropertyId])
 
   const triggerCrawl = useMutation({
     mutationFn: () => api.post('crawls', { json: { site_id: id, trigger: 'manual' } }).json<any>(),
@@ -287,6 +318,53 @@ export default function SiteDetailPage() {
     },
   })
 
+  const connectAnalytics = useMutation({
+    mutationFn: () => analyticsApi.connectUrl(id!, gaPropertyId.trim()),
+    onSuccess: (result) => {
+      if (result.connect_url) {
+        window.open(result.connect_url, '_blank', 'noopener,noreferrer')
+        toast.success('Google Analytics authorization opened')
+      } else {
+        toast.error(result.message || 'Google Analytics is not configured')
+      }
+    },
+    onError: () => toast.error('Could not prepare GA4 connection'),
+  })
+
+  const syncAnalytics = useMutation({
+    mutationFn: () => analyticsApi.sync(id!, { days: 90 }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analytics-status', id] })
+      queryClient.invalidateQueries({ queryKey: ['analytics-performance', id] })
+      queryClient.invalidateQueries({ queryKey: ['site-opportunities', id] })
+      toast.success('GA4 sync finished')
+    },
+    onError: async (error: any) => {
+      const detail = error?.response ? await error.response.json().catch(() => null) : null
+      toast.error(detail?.detail || error?.message || 'GA4 sync failed')
+    },
+  })
+
+  const runPageSpeed = useMutation({
+    mutationFn: () => pageSpeedApi.run(id!, { strategies: ['mobile', 'desktop'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pagespeed', id] })
+      queryClient.invalidateQueries({ queryKey: ['site-opportunities', id] })
+      toast.success('PageSpeed checks completed')
+    },
+    onError: () => toast.error('PageSpeed checks failed'),
+  })
+
+  const setupIndexNow = useMutation({
+    mutationFn: () => indexNowApi.setup(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['indexnow', id] })
+      queryClient.invalidateQueries({ queryKey: ['site-opportunities', id] })
+      toast.success('IndexNow setup checked')
+    },
+    onError: () => toast.error('IndexNow setup failed'),
+  })
+
   const planRootCauseFix = useMutation({
     mutationFn: (group: any) => issuesApi.rootCauseFix({ site_id: id!, issue_type: group.type, mode: 'plan' }),
     onSuccess: (result) => setWorkflowPanel(result),
@@ -324,7 +402,11 @@ export default function SiteDetailPage() {
   const pages = pagesQuery.data?.pages ?? []
   const connection = connectionQuery.data ?? summary?.connection
   const searchConsole = searchConsoleStatusQuery.data ?? summary?.search_console
+  const analytics = analyticsStatusQuery.data ?? summary?.analytics
   const gscPerformance = searchConsolePerformanceQuery.data
+  const analyticsPerformance = analyticsPerformanceQuery.data
+  const pageSpeed = pageSpeedQuery.data ?? summary?.pagespeed
+  const indexNow = indexNowQuery.data ?? summary?.indexnow
   const opportunities: any[] = opportunitiesQuery.data?.opportunities ?? []
   const snippetInsights: any[] = snippetInsightsQuery.data?.insights ?? []
 
@@ -599,6 +681,108 @@ export default function SiteDetailPage() {
                 <p className="text-[11px] text-muted-foreground">
                   {searchConsole?.last_sync_at ? `Last synced ${formatRelativeTime(searchConsole.last_sync_at)}` : searchConsole?.description || 'Connect Google Search Console to unlock real traffic priority.'}
                 </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">GA4 revenue impact</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  GA4 tells AutoSEO which SEO fixes affect sessions, key events, transactions, and revenue.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <TinyPill
+                    label={analytics?.connected ? 'Connected' : 'Not connected'}
+                    className={analytics?.connected ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-muted text-muted-foreground border-border'}
+                  />
+                  {analytics?.property_id && <TinyPill label={`Property ${analytics.property_id}`} />}
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-muted/30 p-2">
+                    <p className="font-bold text-foreground">${Number(analyticsPerformance?.totals?.total_revenue ?? analytics?.totals?.total_revenue ?? 0).toFixed(2)}</p>
+                    <p className="text-muted-foreground">Revenue</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 p-2">
+                    <p className="font-bold text-foreground">{Math.round(analyticsPerformance?.totals?.sessions ?? analytics?.totals?.sessions ?? 0).toLocaleString()}</p>
+                    <p className="text-muted-foreground">Sessions</p>
+                  </div>
+                </div>
+                <input
+                  value={gaPropertyId}
+                  onChange={(event) => setGaPropertyId(event.target.value)}
+                  placeholder="GA4 property ID, e.g. 123456789"
+                  className="w-full h-9 rounded-lg border border-border bg-background px-3 text-xs text-foreground"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => connectAnalytics.mutate()}
+                    disabled={connectAnalytics.isPending || !gaPropertyId.trim()}
+                    className="h-9 px-3 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    {connectAnalytics.isPending ? 'Preparing...' : analytics?.connected ? 'Reconnect GA4' : 'Connect GA4'}
+                  </button>
+                  <button
+                    onClick={() => syncAnalytics.mutate()}
+                    disabled={syncAnalytics.isPending || !analytics?.connected}
+                    className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {syncAnalytics.isPending ? 'Syncing...' : 'Sync 90 days'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">PageSpeed + CrUX</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Run Google PageSpeed checks for the top pages and merge Core Web Vitals into the priority engine.
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-lg bg-muted/30 p-2">
+                    <p className="font-bold text-foreground">{pageSpeed?.summary?.avg_performance_score ?? pageSpeed?.avg_performance_score ?? '-'}</p>
+                    <p className="text-muted-foreground">Avg score</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 p-2">
+                    <p className="font-bold text-foreground">{pageSpeed?.summary?.avg_lcp_ms ?? pageSpeed?.avg_lcp_ms ?? '-'}ms</p>
+                    <p className="text-muted-foreground">Avg LCP</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => runPageSpeed.mutate()}
+                  disabled={runPageSpeed.isPending}
+                  className="h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {runPageSpeed.isPending ? 'Running...' : 'Run PageSpeed'}
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Link2 className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">IndexNow</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  After a fix is deployed and verified by recrawl, IndexNow can notify supported search engines about changed URLs.
+                </p>
+                <TinyPill
+                  label={indexNow?.verified ? 'Verified' : indexNow?.configured ? 'Key file needed' : 'Not set up'}
+                  className={indexNow?.verified ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-muted text-muted-foreground border-border'}
+                />
+                {indexNow?.key_location && (
+                  <code className="block p-3 rounded-lg bg-muted text-[11px] text-foreground break-all">
+                    {indexNow.key_location}
+                  </code>
+                )}
+                <button
+                  onClick={() => setupIndexNow.mutate()}
+                  disabled={setupIndexNow.isPending}
+                  className="h-9 px-3 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  {setupIndexNow.isPending ? 'Checking...' : 'Prepare / verify key'}
+                </button>
               </div>
 
               <div className="rounded-xl border border-border bg-card p-6 space-y-3">
