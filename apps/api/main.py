@@ -138,6 +138,13 @@ from routers.search_console import router as search_console_router
 from routers.google_analytics import router as google_analytics_router
 from routers.pagespeed import router as pagespeed_router
 from routers.indexnow import router as indexnow_router
+from routers.proof import router as proof_router
+from routers.autopilot import router as autopilot_router
+from routers.ai_visibility import router as ai_visibility_router
+from routers.content_briefs import router as content_briefs_router
+from routers.crawl_budget import router as crawl_budget_router
+from routers.agency import router as agency_router
+from routers.integrations import router as integrations_router
 
 _ROUTERS = [
     (auth_router, "/auth"),
@@ -164,6 +171,13 @@ _ROUTERS = [
     (google_analytics_router, ""),
     (pagespeed_router, ""),
     (indexnow_router, ""),
+    (proof_router, ""),
+    (autopilot_router, ""),
+    (ai_visibility_router, ""),
+    (content_briefs_router, ""),
+    (crawl_budget_router, ""),
+    (agency_router, ""),
+    (integrations_router, ""),
 ]
 
 for base_prefix in ("", "/api", "/api/v1"):

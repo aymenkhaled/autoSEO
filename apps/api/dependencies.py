@@ -62,7 +62,19 @@ def _required_scope_for_request(method: str, path: str) -> str | None:
 
     if path.startswith("/health"):
         return None
-    if path.startswith(("/api-keys", "/auth", "/team", "/notifications", "/usage")):
+    if path.startswith(("/api-keys", "/auth", "/team", "/notifications", "/usage", "/agency")):
+        return "__jwt_only__"
+
+    if path.startswith("/autopilot"):
+        return "read:analytics" if method == "GET" else "write:sites"
+
+    if path.startswith("/content-briefs"):
+        return "read:issues" if method == "GET" else "write:fixes"
+
+    if path.startswith("/integrations"):
+        return "read:sites" if method == "GET" else "__jwt_only__"
+
+    if path.startswith("/sites/") and path.endswith("/digest/send"):
         return "__jwt_only__"
 
     if path == "/reports/generate" and method == "POST":

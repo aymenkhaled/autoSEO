@@ -132,6 +132,8 @@ export const connectionsApi = {
     api.delete(`sites/${siteId}/connection`),
   certify: (siteId: string, connectionType: ConnectionType, data: any) =>
     api.post(`sites/${siteId}/connections/${connectionType}/certify`, { json: data }).json<any>(),
+  certificationDashboard: () =>
+    api.get('integrations/certification').json<any>(),
 }
 
 export const githubApi = {
@@ -200,6 +202,51 @@ export const opportunitiesApi = {
     api.get('issues/prioritized', { searchParams: { site_id: siteId } }).json<any>(),
 }
 
+export const proofApi = {
+  site: (siteId: string) => api.get(`sites/${siteId}/proof`).json<any>(),
+}
+
+export const autopilotApi = {
+  nextActions: (siteId?: string) =>
+    api.get('autopilot/next-actions', { searchParams: siteId ? { site_id: siteId } : {} }).json<any>(),
+  run: (data: { site_id?: string; run_type?: string; create_snapshot?: boolean } = {}) =>
+    api.post('autopilot/run', { json: data }).json<any>(),
+  digestPreview: (siteId: string) =>
+    api.get(`sites/${siteId}/digest/preview`).json<any>(),
+  digestSend: (siteId: string) =>
+    api.post(`sites/${siteId}/digest/send`).json<any>(),
+}
+
+export const aiVisibilityApi = {
+  list: (siteId: string) => api.get(`sites/${siteId}/ai-visibility`).json<any>(),
+  run: (siteId: string, data: { prompt: string; target_entity?: string; competitor_domains?: string[] }) =>
+    api.post(`sites/${siteId}/ai-visibility/run`, { json: data }).json<any>(),
+}
+
+export const contentBriefsApi = {
+  list: (siteId: string) => api.get('content-briefs', { searchParams: { site_id: siteId } }).json<any>(),
+  create: (data: { site_id: string; page_url: string; target_keyword?: string; title?: string }) =>
+    api.post('content-briefs', { json: data }).json<any>(),
+  createGithubPr: (id: string) =>
+    api.post(`content-briefs/${id}/github-pr`).json<any>(),
+}
+
+export const crawlBudgetApi = {
+  importLogs: (siteId: string, data: { filename?: string; raw_log: string }) =>
+    api.post(`sites/${siteId}/logs/import`, { json: data }).json<any>(),
+  summary: (siteId: string) =>
+    api.get(`sites/${siteId}/crawl-budget`).json<any>(),
+}
+
+export const agencyApi = {
+  clients: () => api.get('agency/clients').json<any>(),
+  createClient: (data: { name: string; contact_email?: string; brand_name?: string; logo_url?: string }) =>
+    api.post('agency/clients', { json: data }).json<any>(),
+  getClient: (id: string) => api.get(`agency/clients/${id}`).json<any>(),
+  assignSite: (id: string, siteId: string) =>
+    api.post(`agency/clients/${id}/sites`, { json: { site_id: siteId } }).json<any>(),
+}
+
 export const reportsApi = {
   list: () => api.get('reports').json<any>(),
   create: (data: any) => api.post('reports', { json: data }).json<any>(),
@@ -207,6 +254,13 @@ export const reportsApi = {
   digestPreview: (siteId?: string) =>
     api.get('reports/digest/preview', { searchParams: siteId ? { site_id: siteId } : {} }).json<any>(),
   shareLink: (data: any) => api.post('reports/share-link', { json: data }).json<any>(),
+}
+
+export const keywordProviderApi = {
+  sync: (data: { site_id: string; provider?: string }) =>
+    api.post('keywords/sync-provider', { json: data }).json<any>(),
+  opportunities: (siteId: string) =>
+    api.get('keywords/opportunities', { searchParams: { site_id: siteId } }).json<any>(),
 }
 
 export const notificationsApi = {

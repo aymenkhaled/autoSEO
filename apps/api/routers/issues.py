@@ -31,6 +31,7 @@ from packages.shared.seo_domain import (
 )
 from services.opportunities import issue_priorities
 from services.github_connection import github_adapter_for_site
+from services.proof_loop import create_proof_snapshot
 
 router = APIRouter(tags=["issues"])
 settings = get_settings()
@@ -413,6 +414,24 @@ async def root_cause_fix_workflow(
     if not result.get("success"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result)
 
+    proof_snapshot = await create_proof_snapshot(
+        db,
+        site=site,
+        snapshot_type="before_pr",
+        issue_type=issue_type,
+        created_by=auth.user_id,
+        evidence={
+            "trigger": "github_fix_pr_created",
+            "pr_url": result.get("pr_url"),
+            "pr_number": result.get("pr_number"),
+            "branch": result.get("branch"),
+            "mode": result.get("mode"),
+            "files_changed": result.get("files_changed", []),
+            "ai_model": result.get("ai_model") or (preview or {}).get("ai_model"),
+            "risk_level": result.get("risk_level") or (preview or {}).get("risk_level"),
+        },
+    )
+
     matching_issues = [issue for issue, _url in rows]
     for issue in matching_issues:
         issue.fix_status = FIX_STATUS_GITHUB_PR_CREATED
@@ -428,6 +447,7 @@ async def root_cause_fix_workflow(
             "ai_model": result.get("ai_model") or (preview or {}).get("ai_model"),
             "risk_level": result.get("risk_level") or (preview or {}).get("risk_level"),
             "recrawl_verification_status": "pending_deploy_recrawl",
+            "proof_snapshot_id": str(proof_snapshot.id),
         }
 
     db.add(
@@ -446,6 +466,7 @@ async def root_cause_fix_workflow(
                 "ai_model": result.get("ai_model") or (preview or {}).get("ai_model"),
                 "risk_level": result.get("risk_level") or (preview or {}).get("risk_level"),
                 "recrawl_verification_status": "pending_deploy_recrawl",
+                "proof_snapshot_id": str(proof_snapshot.id),
             },
         )
     )
@@ -492,6 +513,7 @@ async def root_cause_fix_workflow(
         "fix_workflow": {**workflow, "status": FIX_STATUS_GITHUB_PR_CREATED},
         "github": result,
         "ai_preview": preview,
+        "proof_snapshot_id": str(proof_snapshot.id),
     }
 
 

@@ -943,3 +943,198 @@ class ReportShareLink(Base):
     __table_args__ = (
         Index("idx_report_share_links_site", "site_id", "created_at"),
     )
+
+
+class FixProofSnapshot(Base):
+    __tablename__ = "fix_proof_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    issue_type = Column(Text)
+    snapshot_type = Column(Text, nullable=False)  # before_pr | after_recrawl | after_7_days | after_28_days | manual
+    pr_url = Column(Text)
+    branch = Column(Text)
+    seo_score = Column(SmallInteger)
+    pages_crawled = Column(Integer, default=0)
+    open_issue_count = Column(Integer, default=0)
+    grouped_issue_count = Column(Integer, default=0)
+    gsc_clicks = Column(Numeric(12, 2), default=0)
+    gsc_impressions = Column(Numeric(12, 2), default=0)
+    gsc_ctr = Column(Numeric(8, 6), default=0)
+    gsc_position = Column(Numeric(8, 3), default=0)
+    ga_sessions = Column(Numeric(12, 2), default=0)
+    ga_key_events = Column(Numeric(12, 2), default=0)
+    ga_revenue = Column(Numeric(12, 2), default=0)
+    pagespeed_score = Column(SmallInteger)
+    evidence = Column(JSONB)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_fix_proof_snapshots_site_created", "site_id", "created_at"),
+        Index("idx_fix_proof_snapshots_site_issue", "site_id", "issue_type"),
+    )
+
+
+class AutopilotRun(Base):
+    __tablename__ = "autopilot_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"))
+    status = Column(Text, nullable=False, default="completed")
+    run_type = Column(Text, nullable=False, default="manual")
+    summary = Column(Text)
+    next_actions = Column(JSONB)
+    provider_health = Column(JSONB)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_autopilot_runs_org_created", "org_id", "created_at"),
+        Index("idx_autopilot_runs_site_created", "site_id", "created_at"),
+    )
+
+
+class AiVisibilityPrompt(Base):
+    __tablename__ = "ai_visibility_prompts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    prompt = Column(Text, nullable=False)
+    target_entity = Column(Text)
+    competitor_domains = Column(ARRAY(Text))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_ai_visibility_prompts_site", "site_id", "created_at"),
+    )
+
+
+class AiVisibilityRun(Base):
+    __tablename__ = "ai_visibility_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    prompt_id = Column(UUID(as_uuid=True), ForeignKey("ai_visibility_prompts.id"))
+    prompt = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="completed")
+    visibility_score = Column(SmallInteger)
+    entity_score = Column(SmallInteger)
+    citation_score = Column(SmallInteger)
+    competitor_mentions = Column(JSONB)
+    missing_context = Column(JSONB)
+    recommendations = Column(JSONB)
+    evidence = Column(JSONB)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_ai_visibility_runs_site_created", "site_id", "created_at"),
+    )
+
+
+class ContentBrief(Base):
+    __tablename__ = "content_briefs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    source_opportunity_id = Column(UUID(as_uuid=True), ForeignKey("site_opportunities.id"))
+    page_url = Column(Text, nullable=False)
+    target_keyword = Column(Text)
+    title = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="brief_ready")
+    brief = Column(JSONB, nullable=False)
+    github_pr_url = Column(Text)
+    github_branch = Column(Text)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_content_briefs_site_created", "site_id", "created_at"),
+    )
+
+
+class KeywordProviderSyncRun(Base):
+    __tablename__ = "keyword_provider_sync_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    provider = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="skipped_provider_missing")
+    keywords_synced = Column(Integer, nullable=False, default=0)
+    message = Column(Text)
+    data = Column(JSONB)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    completed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_keyword_provider_sync_runs_site", "site_id", "created_at"),
+    )
+
+
+class CrawlLogImport(Base):
+    __tablename__ = "crawl_log_imports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    filename = Column(Text)
+    status = Column(Text, nullable=False, default="completed")
+    rows_ingested = Column(Integer, nullable=False, default=0)
+    summary = Column(JSONB)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_crawl_log_imports_site_created", "site_id", "created_at"),
+    )
+
+
+class CrawlLogEntry(Base):
+    __tablename__ = "crawl_log_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    import_id = Column(UUID(as_uuid=True), ForeignKey("crawl_log_imports.id"), nullable=False)
+    url = Column(Text, nullable=False)
+    method = Column(Text)
+    status_code = Column(SmallInteger)
+    user_agent = Column(Text)
+    bot_family = Column(Text)
+    bytes_sent = Column(Integer)
+    requested_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_crawl_log_entries_site_url", "site_id", "url"),
+        Index("idx_crawl_log_entries_site_bot", "site_id", "bot_family"),
+    )
+
+
+class ClientSite(Base):
+    __tablename__ = "client_sites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
+    client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False)
+    site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        Index("idx_client_sites_client_site", "client_id", "site_id", unique=True),
+        Index("idx_client_sites_org", "org_id"),
+    )

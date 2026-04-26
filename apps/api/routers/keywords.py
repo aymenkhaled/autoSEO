@@ -10,12 +10,14 @@ from typing import Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
+from config import get_settings
 from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
-from models.tables import Keyword, KeywordRanking
+from models.tables import Keyword, KeywordProviderSyncRun, KeywordRanking, SearchConsoleQueryMetric, Site
 from packages.shared.readiness import READINESS_TRACKING_ONLY, READINESS_UNAVAILABLE_WITHOUT_PROVIDER, readiness_payload
 
 router = APIRouter(tags=["keywords"])
+settings = get_settings()
 
 
 class KeywordCreate(BaseModel):
@@ -29,6 +31,11 @@ class KeywordCreate(BaseModel):
 class KeywordImportRequest(BaseModel):
     site_id: UUID
     csv_text: str
+
+
+class KeywordProviderSyncRequest(BaseModel):
+    site_id: UUID
+    provider: str = "dataforseo"
 
 
 class KeywordResponse(BaseModel):
@@ -213,6 +220,162 @@ async def import_keyword_rankings(
         "rankings_created": created_rankings,
         "errors": errors[:20],
         "message": "Manual ranking import completed. Live rank tracking still requires a SERP provider.",
+    }
+
+
+@router.post("/sync-provider")
+async def sync_keyword_provider(
+    data: KeywordProviderSyncRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Record a provider sync attempt and refuse fake data when credentials are absent."""
+    site = (
+        await db.execute(select(Site).where(Site.id == data.site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    provider = data.provider.lower().strip()
+    configured = (
+        provider == "dataforseo" and bool(settings.DATAFORSEO_LOGIN and settings.DATAFORSEO_PASSWORD)
+    ) or (
+        provider == "serpapi" and bool(settings.SERPAPI_API_KEY)
+    )
+    status_value = "provider_not_wired"
+    message = (
+        f"{provider} credentials are configured, but the live rank-sync worker is not implemented yet. Use CSV import until provider sync is wired."
+        if configured
+        else f"{provider} credentials are missing, so AutoSEO did not invent rankings. Use CSV import until a SERP provider is connected."
+    )
+    run = KeywordProviderSyncRun(
+        org_id=auth.org_id,
+        site_id=site.id,
+        provider=provider,
+        status=status_value,
+        keywords_synced=0,
+        message=message,
+        data={"configured": configured, "site_domain": site.domain},
+        created_by=auth.user_id,
+        completed_at=datetime.now(timezone.utc),
+    )
+    db.add(run)
+    await db.commit()
+    await db.refresh(run)
+    return {
+        "id": str(run.id),
+        "site_id": str(site.id),
+        "provider": provider,
+        "status": run.status,
+        "keywords_synced": run.keywords_synced,
+        "configured": configured,
+        "message": message,
+    }
+
+
+@router.post("/sync-provider/run", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def run_keyword_provider_sync(
+    data: KeywordProviderSyncRequest,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reserve the real provider-sync route without pretending the job exists."""
+    site = (
+        await db.execute(select(Site).where(Site.id == data.site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail={
+            "status": "provider_not_wired",
+            "provider": data.provider.lower().strip(),
+            "message": "Live SERP provider sync is not implemented yet. Use CSV ranking import for now.",
+        },
+    )
+
+
+@router.get("/opportunities")
+async def keyword_opportunities(
+    site_id: UUID = Query(...),
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    keywords = (
+        await db.execute(
+            select(Keyword)
+            .where(Keyword.site_id == site_id, Keyword.org_id == auth.org_id)
+            .order_by(Keyword.priority.desc(), Keyword.created_at.desc())
+        )
+    ).scalars().all()
+    opportunities = []
+    for keyword in keywords:
+        latest = (
+            await db.execute(
+                select(KeywordRanking)
+                .where(KeywordRanking.keyword_id == keyword.id)
+                .order_by(KeywordRanking.checked_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if latest and latest.position and 4 <= latest.position <= 20:
+            opportunities.append({
+                "type": "striking_distance_keyword",
+                "keyword": keyword.keyword,
+                "target_url": latest.url or keyword.target_url,
+                "position": latest.position,
+                "previous_position": latest.previous_position,
+                "search_volume": latest.search_volume,
+                "priority_score": 180 + max(0, 20 - latest.position),
+                "next_step": "Refresh the target page, improve title/meta intent match, and add internal links.",
+            })
+        elif not latest:
+            opportunities.append({
+                "type": "keyword_missing_rank_data",
+                "keyword": keyword.keyword,
+                "target_url": keyword.target_url,
+                "priority_score": 50 + int(keyword.priority or 1) * 10,
+                "next_step": "Import CSV rankings or connect a SERP provider before using this keyword for proof-based decisions.",
+            })
+
+    gsc_queries = (
+        await db.execute(
+            select(
+                SearchConsoleQueryMetric.query,
+                SearchConsoleQueryMetric.page_url,
+                SearchConsoleQueryMetric.impressions,
+                SearchConsoleQueryMetric.clicks,
+                SearchConsoleQueryMetric.ctr,
+                SearchConsoleQueryMetric.position,
+            )
+            .where(SearchConsoleQueryMetric.site_id == site_id, SearchConsoleQueryMetric.org_id == auth.org_id)
+            .order_by(SearchConsoleQueryMetric.impressions.desc())
+            .limit(50)
+        )
+    ).all()
+    tracked = {kw.keyword.lower() for kw in keywords}
+    for query, page_url, impressions, clicks, ctr, position in gsc_queries:
+        if query.lower() in tracked:
+            continue
+        if float(impressions or 0) >= 100:
+            opportunities.append({
+                "type": "gsc_query_not_tracked",
+                "keyword": query,
+                "target_url": page_url,
+                "impressions": float(impressions or 0),
+                "clicks": float(clicks or 0),
+                "ctr": float(ctr or 0),
+                "position": float(position or 0),
+                "priority_score": min(220, 100 + int(float(impressions or 0) / 100)),
+                "next_step": "Add this Search Console query as a tracked keyword and map it to the best landing page.",
+            })
+
+    opportunities.sort(key=lambda item: item.get("priority_score", 0), reverse=True)
+    return {
+        "site_id": str(site_id),
+        "opportunities": opportunities[:50],
+        "total": len(opportunities),
+        "message": "Keyword opportunities combine manual ranking imports with Search Console queries. Live SERP features require DataForSEO or SerpApi.",
     }
 
 

@@ -20,6 +20,8 @@ import ApiKeysPage from '@/pages/ApiKeysPage'
 import ReportsPage from '@/pages/ReportsPage'
 import BillingPage from '@/pages/BillingPage'
 import IntegrationsPage from '@/pages/IntegrationsPage'
+import AutopilotPage from '@/pages/AutopilotPage'
+import AgencyPage from '@/pages/AgencyPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { loading, isAuthenticated } = useAuth()
@@ -80,6 +82,7 @@ export default function App() {
         <Route path="/dashboard/issues" element={<DashboardRoute><IssuesPage /></DashboardRoute>} />
         <Route path="/dashboard/fixes" element={<DashboardRoute><FixesPage /></DashboardRoute>} />
         <Route path="/dashboard/analytics" element={<DashboardRoute><AnalyticsPage /></DashboardRoute>} />
+        <Route path="/dashboard/autopilot" element={<DashboardRoute><AutopilotPage /></DashboardRoute>} />
         <Route path="/dashboard/keywords" element={<DashboardRoute><KeywordsPage /></DashboardRoute>} />
         <Route path="/dashboard/competitors" element={<DashboardRoute><CompetitorsPage /></DashboardRoute>} />
         <Route path="/dashboard/reports" element={<DashboardRoute><ReportsPage /></DashboardRoute>} />
@@ -88,6 +91,7 @@ export default function App() {
         <Route path="/dashboard/billing" element={<DashboardRoute><BillingPage /></DashboardRoute>} />
         <Route path="/dashboard/settings" element={<DashboardRoute><SettingsPage /></DashboardRoute>} />
         <Route path="/dashboard/integrations" element={<DashboardRoute><IntegrationsPage /></DashboardRoute>} />
+        <Route path="/dashboard/agency" element={<DashboardRoute><AgencyPage /></DashboardRoute>} />
 
         {/* Legacy redirects */}
         <Route path="/sites" element={<Navigate to="/dashboard/sites" replace />} />

@@ -139,6 +139,18 @@ Open [http://127.0.0.1:8001](http://127.0.0.1:8001).
 9. Open `Keywords`, paste a CSV with `keyword,position,previous_position,volume,url,country,device,date`, and confirm ranking history appears.
 10. Open `Competitors`, add a competitor, then run page-vs-page comparison against one crawled page.
 
+### Proof-driven autopilot flow
+
+1. Crawl a site and, if possible, connect GSC/GA4/PageSpeed.
+2. Open `Autopilot`.
+3. Choose the site and click `Run Autopilot`.
+4. Confirm the page shows a proof snapshot, prioritized next actions, and provider health.
+5. Use `Weekly digest -> Preview` to see what changed, what is waiting, and what to fix next.
+6. Run `AI answer-readiness` with a prompt like `What is the best SEO automation platform for technical SEO fixes?`.
+7. Create a `Content refresh brief` for a high-value crawled URL, then create a GitHub PR plan if the site is verified and GitHub is connected.
+8. Paste a small access-log sample into `Log file / crawl budget intelligence` to compare Googlebot hits with AutoSEO crawl and GSC value.
+9. Open `Agency`, create a client, assign a site, and use report share links for read-only proof-of-work views.
+
 ### AI-powered GitHub PR flow
 
 1. Add a site and run a crawl.
@@ -174,3 +186,5 @@ npm run build
 - GA4 uses the Google Analytics Data API with read-only `analytics.readonly` scope. Search Console remains read-only too.
 - PageSpeed checks use the PageSpeed Insights endpoint and optional CrUX API key for real-user field metrics.
 - IndexNow submissions stay blocked until the generated key file is publicly verified on the site host.
+- Live SERP/rank tracking is not faked. Use CSV import now, or configure `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` or `SERPAPI_API_KEY` when provider syncing is wired.
+- Autopilot and proof snapshots work from internal data immediately; they become much more valuable when GSC, GA4, PageSpeed, GitHub PRs, and log imports are connected.

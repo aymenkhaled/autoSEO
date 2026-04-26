@@ -16,6 +16,7 @@ from models.tables import (
     ChangeLog,
     Competitor,
     Crawl,
+    FixProofSnapshot,
     Issue,
     IssueComment,
     Keyword,
@@ -33,6 +34,7 @@ from models.tables import (
 )
 from packages.shared.notifications import notify_org_users
 from packages.shared.patch_safety import validate_file_changes
+from services.crawl_budget import parse_log_lines
 from routers.auth import create_access_token
 from workers.tasks.fix import _run_ai_analysis_async
 
@@ -704,3 +706,202 @@ def test_generated_report_includes_opportunities_and_search_console_totals():
     assert payload["search_console"]["totals"]["impressions"] == 1000
     assert payload["github_fix_status"]["open_pr_issue_count"] == 1
     assert payload["top_opportunities"]
+
+
+def test_proof_summary_pairs_snapshots_and_counts_open_groups_only():
+    user, org = run(seed_user())
+
+    async def seed_proof_rows():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Proof Site", domain="https://proof.test")
+            session.add(site)
+            await session.flush()
+            crawl = Crawl(site_id=site.id, org_id=org.id, status="completed", seo_score=41, pages_crawled=2)
+            session.add(crawl)
+            await session.flush()
+            page = Page(crawl_id=crawl.id, site_id=site.id, org_id=org.id, url="https://proof.test/page", title="Proof")
+            session.add(page)
+            await session.flush()
+            session.add_all([
+                Issue(
+                    crawl_id=crawl.id,
+                    site_id=site.id,
+                    org_id=org.id,
+                    page_id=page.id,
+                    type="duplicate_title",
+                    category="meta",
+                    severity="medium",
+                    impact_score=60,
+                    fix_type="manual",
+                    fix_status="pending",
+                ),
+                Issue(
+                    crawl_id=crawl.id,
+                    site_id=site.id,
+                    org_id=org.id,
+                    page_id=page.id,
+                    type="missing_title",
+                    category="meta",
+                    severity="medium",
+                    impact_score=50,
+                    fix_type="manual",
+                    fix_status="deployed_after_merge",
+                ),
+                FixProofSnapshot(
+                    org_id=org.id,
+                    site_id=site.id,
+                    issue_type="duplicate_title",
+                    snapshot_type="before_pr",
+                    pr_url="https://github.test/pr/1",
+                    branch="autoseo/fix-title",
+                    seo_score=41,
+                    open_issue_count=1,
+                    grouped_issue_count=1,
+                    gsc_clicks=10,
+                    gsc_impressions=100,
+                    ga_revenue=5,
+                    pagespeed_score=70,
+                ),
+                FixProofSnapshot(
+                    org_id=org.id,
+                    site_id=site.id,
+                    issue_type="duplicate_title",
+                    snapshot_type="after_recrawl",
+                    pr_url="https://github.test/pr/1",
+                    branch="autoseo/fix-title",
+                    seo_score=80,
+                    open_issue_count=0,
+                    grouped_issue_count=0,
+                    gsc_clicks=14,
+                    gsc_impressions=130,
+                    ga_revenue=9,
+                    pagespeed_score=75,
+                ),
+            ])
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_proof_rows())
+    response = run(api_request("GET", f"/api/v1/sites/{site_id}/proof", headers=auth_headers(user)))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["current"]["grouped_issue_count"] == 1
+    assert payload["delta"]["seo_score"] == 39
+    assert payload["delta"]["grouped_issue_count"] == -1
+    assert payload["proof_pairs"][0]["proof_status"] == "proven_after_recrawl"
+    assert payload["proof_pairs"][0]["pr_url"] == "https://github.test/pr/1"
+
+
+def test_digest_send_rejects_api_keys_even_with_write_sites_scope():
+    user, org = run(seed_user())
+    raw_key = "autoseo_digest_write_sites"
+
+    async def seed_site_and_key():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Digest Site", domain="https://digest.test")
+            session.add(site)
+            session.add(
+                ApiKey(
+                    org_id=org.id,
+                    name="Digest Key",
+                    key_hash=hashlib.sha256(raw_key.encode("utf-8")).hexdigest(),
+                    key_prefix=raw_key[:12],
+                    scopes=["write:sites", "read:sites"],
+                )
+            )
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site_and_key())
+    response = run(api_request("POST", f"/api/v1/sites/{site_id}/digest/send", headers={"X-AutoSEO-Key": raw_key}))
+    assert response.status_code == 403
+    assert "user session" in response.json()["detail"].lower()
+
+
+def test_keyword_provider_sync_is_honest_when_worker_is_not_wired():
+    user, org = run(seed_user())
+
+    async def seed_site():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Keyword Site", domain="https://keyword.test")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site())
+    response = run(api_request(
+        "POST",
+        "/api/v1/keywords/sync-provider",
+        headers=auth_headers(user),
+        json={"site_id": str(site_id), "provider": "dataforseo"},
+    ))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "provider_not_wired"
+    assert "did not invent rankings" in payload["message"]
+
+
+def test_ai_visibility_is_labeled_as_readiness_scoring_only():
+    user, org = run(seed_user())
+
+    async def seed_site():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="AI Readiness Site", domain="https://ai-ready.test")
+            session.add(site)
+            await session.commit()
+            return site.id
+
+    site_id = run(seed_site())
+    response = run(api_request("GET", f"/api/v1/sites/{site_id}/ai-visibility", headers=auth_headers(user)))
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["readiness"] == "readiness_scoring_only"
+    assert "does not yet query ChatGPT" in payload["message"]
+
+
+def test_crawl_budget_parser_supports_json_csv_and_redacts_query_params():
+    json_log = '{"ClientRequestURI":"/pricing?email=test@example.com","ClientRequestMethod":"GET","EdgeResponseStatus":200,"ClientRequestUserAgent":"Googlebot/2.1"}'
+    entries, errors = parse_log_lines(json_log, site_domain="https://logs.test")
+    assert not errors
+    assert entries[0]["url"] == "https://logs.test/pricing"
+    assert entries[0]["bot_family"] == "googlebot"
+
+    csv_log = "ClientRequestURI,ClientRequestMethod,EdgeResponseStatus,ClientRequestUserAgent\n/contact?token=secret,GET,404,bingbot"
+    entries, errors = parse_log_lines(csv_log, site_domain="https://logs.test")
+    assert not errors
+    assert entries[0]["url"] == "https://logs.test/contact"
+    assert entries[0]["bot_family"] == "bingbot"
+
+
+def test_integration_certification_dashboard_is_readable_with_site_scope_key():
+    user, org = run(seed_user())
+    raw_key = "autoseo_read_sites_certification"
+
+    async def seed_site_cert_and_key():
+        async with AsyncSessionLocal() as session:
+            site = Site(org_id=org.id, name="Certification Site", domain="https://cert-dashboard.test", connection_type="crawler")
+            session.add(site)
+            await session.flush()
+            session.add(ConnectionCertification(
+                org_id=org.id,
+                site_id=site.id,
+                connection_type="crawler",
+                status="production_ready",
+                message="Crawler is read-only and certified.",
+            ))
+            session.add(ApiKey(
+                org_id=org.id,
+                name="Read Sites Key",
+                key_hash=hashlib.sha256(raw_key.encode("utf-8")).hexdigest(),
+                key_prefix=raw_key[:12],
+                scopes=["read:sites"],
+            ))
+            await session.commit()
+
+    run(seed_site_cert_and_key())
+    response = run(api_request("GET", "/api/v1/integrations/certification", headers={"X-AutoSEO-Key": raw_key}))
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["total_sites"] == 1
+    crawler = next(item for item in payload["sites"][0]["certifications"] if item["connection_type"] == "crawler")
+    assert crawler["status"] == "production_ready"

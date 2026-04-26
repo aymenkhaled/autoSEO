@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     GOOGLE_PAGESPEED_API_KEY: str = ""
     GOOGLE_CRUX_API_KEY: str = ""
 
+    # --- SERP / Keyword Providers ---
+    DATAFORSEO_LOGIN: str = ""
+    DATAFORSEO_PASSWORD: str = ""
+    SERPAPI_API_KEY: str = ""
+
     # --- IndexNow ---
     INDEXNOW_ENDPOINT: str = "https://api.indexnow.org/indexnow"
 

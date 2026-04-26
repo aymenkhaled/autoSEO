@@ -15,11 +15,19 @@ from schemas.site import SiteCreate, SiteUpdate, SiteResponse, SiteListResponse
 from models.tables import (
     AiUsage,
     AnalyticsPageMetric,
+    AiVisibilityPrompt,
+    AiVisibilityRun,
+    AutopilotRun,
     Backlink,
     ChangeLog,
+    ClientSite,
     Competitor,
     CompetitorPageComparison,
+    ContentBrief,
     Crawl,
+    CrawlLogEntry,
+    CrawlLogImport,
+    FixProofSnapshot,
     FixVersion,
     GoogleAnalyticsConnection,
     GoogleAnalyticsSyncRun,
@@ -28,6 +36,7 @@ from models.tables import (
     Issue,
     IssueComment,
     Keyword,
+    KeywordProviderSyncRun,
     KeywordRanking,
     Page,
     PageSource,
@@ -122,6 +131,9 @@ async def _delete_site_records(db: AsyncSession, site_id: UUID, org_id: UUID) ->
         "scheduled_reports": _delete_count(
             await db.execute(delete(ScheduledReport).where(ScheduledReport.site_id == site_id, ScheduledReport.org_id == org_id))
         ),
+        "content_briefs": _delete_count(
+            await db.execute(delete(ContentBrief).where(ContentBrief.site_id == site_id, ContentBrief.org_id == org_id))
+        ),
         "site_opportunities": _delete_count(
             await db.execute(delete(SiteOpportunity).where(SiteOpportunity.site_id == site_id, SiteOpportunity.org_id == org_id))
         ),
@@ -166,6 +178,30 @@ async def _delete_site_records(db: AsyncSession, site_id: UUID, org_id: UUID) ->
         ),
         "report_share_links": _delete_count(
             await db.execute(delete(ReportShareLink).where(ReportShareLink.site_id == site_id, ReportShareLink.org_id == org_id))
+        ),
+        "fix_proof_snapshots": _delete_count(
+            await db.execute(delete(FixProofSnapshot).where(FixProofSnapshot.site_id == site_id, FixProofSnapshot.org_id == org_id))
+        ),
+        "autopilot_runs": _delete_count(
+            await db.execute(delete(AutopilotRun).where(AutopilotRun.site_id == site_id, AutopilotRun.org_id == org_id))
+        ),
+        "ai_visibility_runs": _delete_count(
+            await db.execute(delete(AiVisibilityRun).where(AiVisibilityRun.site_id == site_id, AiVisibilityRun.org_id == org_id))
+        ),
+        "ai_visibility_prompts": _delete_count(
+            await db.execute(delete(AiVisibilityPrompt).where(AiVisibilityPrompt.site_id == site_id, AiVisibilityPrompt.org_id == org_id))
+        ),
+        "keyword_provider_sync_runs": _delete_count(
+            await db.execute(delete(KeywordProviderSyncRun).where(KeywordProviderSyncRun.site_id == site_id, KeywordProviderSyncRun.org_id == org_id))
+        ),
+        "crawl_log_entries": _delete_count(
+            await db.execute(delete(CrawlLogEntry).where(CrawlLogEntry.site_id == site_id, CrawlLogEntry.org_id == org_id))
+        ),
+        "crawl_log_imports": _delete_count(
+            await db.execute(delete(CrawlLogImport).where(CrawlLogImport.site_id == site_id, CrawlLogImport.org_id == org_id))
+        ),
+        "client_sites": _delete_count(
+            await db.execute(delete(ClientSite).where(ClientSite.site_id == site_id, ClientSite.org_id == org_id))
         ),
         "issues": _delete_count(
             await db.execute(delete(Issue).where(Issue.site_id == site_id, Issue.org_id == org_id))

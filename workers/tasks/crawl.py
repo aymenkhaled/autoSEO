@@ -636,6 +636,8 @@ async def _async_crawl(site_id: str, crawl_id: str):
                         )
                     ).scalars().all()
                     verified_after_pr = 0
+                    verified_issue_groups = {}
+                    verified_issues_by_group = {}
                     for prior_issue in prior_pr_issues:
                         metadata = dict(prior_issue.proposed_fix_metadata or {})
                         if prior_issue.type in current_issue_types:
@@ -649,6 +651,42 @@ async def _async_crawl(site_id: str, crawl_id: str):
                             metadata["verified_crawl_id"] = crawl_id
                             prior_issue.proposed_fix_metadata = metadata
                             verified_after_pr += 1
+                            proof_key = (
+                                prior_issue.type,
+                                metadata.get("pr_url") or "",
+                                metadata.get("branch") or "",
+                            )
+                            verified_issue_groups.setdefault(
+                                proof_key,
+                                {
+                                    "trigger": "recrawl_verified_removed",
+                                    "crawl_id": crawl_id,
+                                    "pr_url": metadata.get("pr_url"),
+                                    "branch": metadata.get("branch"),
+                                    "mode": metadata.get("mode"),
+                                    "files_changed": metadata.get("files_changed", []),
+                                    "ai_model": metadata.get("ai_model"),
+                                    "risk_level": metadata.get("risk_level"),
+                                    "verification": "recrawl_removed_issue_type",
+                                },
+                            )
+                            verified_issues_by_group.setdefault(proof_key, []).append(prior_issue)
+
+                    if verified_issue_groups:
+                        from services.proof_loop import create_proof_snapshot
+
+                        for proof_key, evidence in verified_issue_groups.items():
+                            snapshot = await create_proof_snapshot(
+                                db,
+                                site=site,
+                                snapshot_type="after_recrawl",
+                                issue_type=proof_key[0],
+                                evidence=evidence,
+                            )
+                            for prior_issue in verified_issues_by_group.get(proof_key, []):
+                                metadata = dict(prior_issue.proposed_fix_metadata or {})
+                                metadata["after_recrawl_proof_snapshot_id"] = str(snapshot.id)
+                                prior_issue.proposed_fix_metadata = metadata
 
                     site.status = "active" if getattr(site, "ownership_verified", False) else "pending_verification"
                     site.last_crawled_at = datetime.now(timezone.utc)

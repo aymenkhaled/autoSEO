@@ -27,6 +27,7 @@ async def get_runtime_readiness():
     github_app_configured = bool(settings.GITHUB_APP_ID and settings.GITHUB_APP_PRIVATE_KEY and settings.GITHUB_APP_SLUG)
     gsc_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
     ga4_configured = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
+    serp_configured = bool(settings.DATAFORSEO_LOGIN and settings.DATAFORSEO_PASSWORD) or bool(settings.SERPAPI_API_KEY)
     stripe_configured = bool(settings.STRIPE_SECRET_KEY and settings.STRIPE_WEBHOOK_SECRET)
     webhook_delivery_available = True
 
@@ -42,6 +43,7 @@ async def get_runtime_readiness():
             "indexnow": True,
             "stripe": stripe_configured,
             "resend": bool(settings.RESEND_API_KEY),
+            "serp_provider": serp_configured,
             "webhooks": webhook_delivery_available,
         },
         "features": {
@@ -117,6 +119,40 @@ async def get_runtime_readiness():
                     if settings.RESEND_API_KEY
                     else "Scheduled reports are stored and digest preview works in-app, but email delivery waits for RESEND_API_KEY."
                 ),
+            ),
+            "proof_loop": readiness_payload(
+                READINESS_WORKING,
+                label="Proof loop available",
+                description="AutoSEO can snapshot crawl, GSC, GA4, PageSpeed, and GitHub PR status before and after fixes.",
+            ),
+            "autopilot": readiness_payload(
+                READINESS_WORKING,
+                label="Autopilot next actions available",
+                description="Autopilot can rank next actions across crawler issues, GSC, GA4, PageSpeed, IndexNow, and proof state.",
+            ),
+            "ai_visibility": readiness_payload(
+                "readiness_scoring_only",
+                label="AI answer-readiness scoring available",
+                description="Manual prompt scoring works from crawled content and schema. AutoSEO does not yet query ChatGPT, Perplexity, Gemini, or Google AI Overviews.",
+            ),
+            "serp_keywords": readiness_payload(
+                "provider_not_wired" if serp_configured else READINESS_UNAVAILABLE_WITHOUT_PROVIDER,
+                label="SERP provider credentials present, sync not wired" if serp_configured else "SERP provider needed",
+                description=(
+                    "SERP provider credentials are present, but live rank sync is not implemented yet. Use CSV ranking import today."
+                    if serp_configured
+                    else "Manual CSV ranking import works now. Live rank tracking needs DataForSEO or SerpApi credentials."
+                ),
+            ),
+            "crawl_budget": readiness_payload(
+                READINESS_WORKING,
+                label="Log import available",
+                description="Server log imports can compare Googlebot behavior with AutoSEO crawl coverage and GSC page value.",
+            ),
+            "agency": readiness_payload(
+                READINESS_WORKING,
+                label="Agency client workspaces available",
+                description="Agencies can group sites by client and use snapshot-safe report links for proof-of-work views.",
             ),
             "team_invites": readiness_payload(
                 READINESS_SAVED_ONLY,

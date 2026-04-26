@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Globe, Bug, Wrench, BarChart3,
   Settings, Zap, ChevronLeft, ChevronRight,
   Sun, Moon, LogOut, Menu, X, Target, Swords,
-  Users, Key, FileText, CreditCard, Puzzle,
+  Users, Key, FileText, CreditCard, Puzzle, Bot, Building2,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useAppStore } from '@/stores/app-store'
@@ -20,6 +20,7 @@ const NAV_GROUPS = [
     items: [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { href: '/dashboard/analytics', icon: BarChart3, label: 'Analytics' },
+      { href: '/dashboard/autopilot', icon: Bot, label: 'Autopilot' },
     ],
   },
   {
@@ -42,6 +43,7 @@ const NAV_GROUPS = [
     label: 'Account',
     items: [
       { href: '/dashboard/team', icon: Users, label: 'Team' },
+      { href: '/dashboard/agency', icon: Building2, label: 'Agency' },
       { href: '/dashboard/integrations', icon: Puzzle, label: 'Integrations' },
       { href: '/dashboard/api-keys', icon: Key, label: 'API Keys' },
       { href: '/dashboard/billing', icon: CreditCard, label: 'Billing' },
