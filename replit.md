@@ -107,6 +107,50 @@ After disabling, users can sign up and log in immediately without confirming the
 - **`services/stripe_service.py`** — Fixed `stripe.error.StripeError` → `stripe.StripeError` for Stripe SDK v15.x compatibility (error classes moved to top-level namespace in v5+).
 - **`workers/tasks/report.py`** — Added Celery/Redis noop fallback (matching crawl.py and fix.py patterns) so the module imports cleanly without a running Redis instance.
 - **`services/crawl_budget.py`** — Removed dead double-assignment (`requested_at = None` immediately overwritten on next line).
+- **`routers/competitors.py`** (May 2026 audit) — Fixed `DELETE /competitors/{id}` 500 error: FK violation from `competitor_page_comparisons` table. Added `delete(CompetitorPageComparison).where(...)` before `db.delete(comp)`. Also added `from sqlalchemy import delete` import.
+
+## API Audit Summary (May 2026 — 3-hour deep-dive)
+Comprehensive end-to-end testing of 60+ API endpoints against the live database. All findings:
+
+### Confirmed Working (200/201/204)
+Every endpoint called by `apps/web/src/lib/api-client.ts` returns correct responses:
+- Auth: login, me, org, sync ✅
+- Sites: CRUD, summary, pages, setup, opportunities, connection, verify, verify/check ✅
+- Crawls: list, get, trigger, cancel (DELETE), SSE progress ✅
+- Issues: list, aggregated, prioritized, root-cause-fix, get ✅
+- Fixes: apply, rollback, versions ✅
+- Connections: status, capabilities, test, save (PUT), remove, certify ✅
+- Search Console: connect-url, status, sync (404 when not connected = correct), performance ✅
+- Analytics: connect-url, status, sync (404 when not connected = correct), performance ✅
+- PageSpeed: list, run ✅
+- IndexNow: status, setup, submit (409 when not verified = correct) ✅
+- Competitors: list, add, delete (FIXED), analyze, compare-pages ✅
+- Keywords: list, create, delete, history, import, opportunities ✅
+- Content Briefs: list, create, github-pr (403 when ownership not verified = correct) ✅
+- AI Visibility: list, run ✅
+- Autopilot: next-actions, run, digest/preview, digest/send ✅
+- Agency: clients, create-client, get-client, assign-site ✅
+- Notifications: list, mark-read, mark-all-read, preferences, update-preferences ✅
+- Webhooks: list, create, update, delete, test, deliveries ✅
+- API Keys: list, create (validates scopes), revoke ✅
+- Team: list, invite, remove, update-role ✅
+- Snippet: install-code, insights, collect ✅
+- Reports: list, create, generate, digest/preview, share-link ✅
+- GitHub: install-url, complete-install, repo-analysis ✅
+- Dashboard: org/dashboard ✅
+- Usage, Change-log, System readiness, Crawl budget ✅
+- Proof, Autopilot, AI-Visibility, Integrations/certification ✅
+
+### Confirmed Non-Bugs (expected behavior)
+- `POST /sites/{id}/search-console/sync` → 404 "not connected" (site has no GSC) ✅
+- `POST /sites/{id}/analytics/sync` → 404 "not connected" (site has no GA4) ✅
+- `POST /sites/{id}/indexnow/submit` → 409 "key not verified" (correct gate) ✅
+- `POST /fixes/apply` → 400 "no proposed fix" (issue has no AI fix yet) ✅
+- `POST /fixes/rollback` → 400 "only deployed fixes" (issue is pending) ✅
+- `POST /content-briefs/{id}/github-pr` → 403 "verify ownership first" (correct) ✅
+- `GET /sites/{id}/github/repo-analysis` → 404 when site has no GitHub config ✅
+- `GET crawl/progress` → SSE streaming (not JSON, correct) ✅
+- `POST api-keys` with invalid scopes → 400 with scope list (correct validation) ✅
 
 ## Phase 2 — Crawler Build Plan v4 / Gap Analysis (April 2026)
 Implemented from gap-analysis files:

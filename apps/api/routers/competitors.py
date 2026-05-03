@@ -1,7 +1,7 @@
 """Competitors router — competitor tracking and analysis."""
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from uuid import UUID
 from typing import Optional
 from datetime import datetime, timezone
@@ -304,5 +304,8 @@ async def remove_competitor(
     comp = result.scalar_one_or_none()
     if not comp:
         raise HTTPException(status_code=404, detail="Competitor not found")
+    await db.execute(
+        delete(CompetitorPageComparison).where(CompetitorPageComparison.competitor_id == competitor_id)
+    )
     await db.delete(comp)
     await db.commit()
