@@ -305,6 +305,29 @@ async def get_site(
     return site
 
 
+@router.get("/{site_id}/setup")
+async def get_site_setup(
+    site_id: UUID,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the site setup checklist and readiness state."""
+    site = (
+        await db.execute(select(Site).where(Site.id == site_id, Site.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not site:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site not found")
+    latest_crawl = (
+        await db.execute(
+            select(Crawl)
+            .where(Crawl.site_id == site_id, Crawl.org_id == auth.org_id, Crawl.status == "completed")
+            .order_by(Crawl.completed_at.desc().nullslast(), Crawl.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return site_setup_payload(site, latest_crawl)
+
+
 @router.get("/{site_id}/summary")
 async def get_site_summary(
     site_id: UUID,

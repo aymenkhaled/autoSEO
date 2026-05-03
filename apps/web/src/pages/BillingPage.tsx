@@ -35,7 +35,7 @@ const PLANS = [
     period: 'month',
     description: 'For serious SEO',
     color: 'border-border',
-    features: ['20 sites', '100 crawls/month', '2000 pages/crawl', '500 AI fixes/month', 'PDF reports', 'Slack notifications', 'Priority support'],
+    features: ['20 sites', '100 crawls/month', '5000 pages/crawl', '500 AI fixes/month', 'PDF reports', 'Slack notifications', 'Priority support'],
   },
   {
     name: 'Agency',
@@ -43,7 +43,7 @@ const PLANS = [
     period: 'month',
     description: 'For agencies & teams',
     color: 'border-border',
-    features: ['100 sites', '500 crawls/month', '5000 pages/crawl', '2000 AI fixes/month', 'White-label reports', 'Team management', 'Dedicated support'],
+    features: ['100 sites', '500 crawls/month', '50000 pages/crawl', '2000 AI fixes/month', 'White-label reports', 'Team management', 'Dedicated support'],
   },
 ]
 

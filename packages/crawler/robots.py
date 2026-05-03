@@ -31,9 +31,9 @@ async def get_robots_rules(domain: str, user_agent: str = "AutoSEO") -> RobotFil
         return cached[0]
 
     robots_url = urljoin(_host_key(domain) + "/", "robots.txt")
+    parser = RobotFileParser()
     if not is_safe_url(robots_url):
         return parser
-    parser = RobotFileParser()
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(robots_url, timeout=10)

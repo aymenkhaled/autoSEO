@@ -12,10 +12,10 @@ from packages.shared.seo_domain import FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_
 router = APIRouter(tags=["usage"])
 
 PLAN_LIMITS = {
-    "free":    {"sites": 1,   "crawls_per_month": 5,   "pages_per_crawl": 50,   "ai_fixes_per_month": 10},
-    "starter": {"sites": 5,   "crawls_per_month": 30,  "pages_per_crawl": 500,  "ai_fixes_per_month": 100},
-    "pro":     {"sites": 20,  "crawls_per_month": 100, "pages_per_crawl": 2000, "ai_fixes_per_month": 500},
-    "agency":  {"sites": 100, "crawls_per_month": 500, "pages_per_crawl": 5000, "ai_fixes_per_month": 2000},
+    "free":    {"sites": 1,   "crawls_per_month": 5,   "pages_per_crawl": 50,    "ai_fixes_per_month": 10},
+    "starter": {"sites": 5,   "crawls_per_month": 30,  "pages_per_crawl": 500,   "ai_fixes_per_month": 100},
+    "pro":     {"sites": 20,  "crawls_per_month": 100, "pages_per_crawl": 5000,  "ai_fixes_per_month": 500},
+    "agency":  {"sites": 100, "crawls_per_month": 500, "pages_per_crawl": 50000, "ai_fixes_per_month": 2000},
 }
 
 
