@@ -101,6 +101,90 @@ ISSUE_GUIDANCE = {
         "recommended_fix": "Use an absolute public HTTPS image URL and confirm it returns 200.",
         "severity_explanation": "Medium because it affects sharing, not core indexability.",
     },
+    "missing_title": {
+        "title": "Page has no title tag",
+        "summary": "One or more pages are missing a <title> element entirely.",
+        "why_it_matters": "The title tag is the strongest on-page signal for what a page is about. Without it, search engines may generate or omit the title in results.",
+        "recommended_fix": "Add a unique, descriptive <title> to every page. Use route metadata, CMS fields, or a server-rendered head tag.",
+        "severity_explanation": "High because a missing title directly hurts CTR and relevance scoring.",
+    },
+    "title_too_short": {
+        "title": "Page title is too short",
+        "summary": "One or more page titles are under 30 characters and may not be descriptive enough for search engines.",
+        "why_it_matters": "Short titles waste valuable keyword real estate and can signal thin or placeholder content.",
+        "recommended_fix": "Expand titles to 50–60 characters that describe the page topic and include the primary keyword.",
+        "severity_explanation": "Medium because the page is indexed, but click-through rate and relevance may suffer.",
+    },
+    "title_too_long": {
+        "title": "Page title is too long",
+        "summary": "One or more page titles exceed 60 characters and will be truncated in search results.",
+        "why_it_matters": "Truncated titles hide the message and reduce click-through rate.",
+        "recommended_fix": "Shorten titles to 50–60 characters, keeping the primary keyword near the front.",
+        "severity_explanation": "Low to medium; the page ranks but truncation hurts CTR.",
+    },
+    "missing_meta_description": {
+        "title": "Page has no meta description",
+        "summary": "One or more pages are missing a meta description tag.",
+        "why_it_matters": "Search engines often use the meta description as the snippet in results. Without it, Google generates a snippet which may not be appealing.",
+        "recommended_fix": "Write a unique 120–155 character meta description for each page that accurately previews the content and includes a natural call to action.",
+        "severity_explanation": "High because it directly impacts click-through rate from search results.",
+    },
+    "meta_description_too_long": {
+        "title": "Meta description is too long",
+        "summary": "One or more meta descriptions exceed 155 characters and will be truncated.",
+        "why_it_matters": "Truncated descriptions cut off the message users see in search snippets.",
+        "recommended_fix": "Rewrite meta descriptions to 120–155 characters, placing the key message and CTA early.",
+        "severity_explanation": "Low to medium; rankings are not directly affected but CTR may drop.",
+    },
+    "missing_h1": {
+        "title": "Page has no H1 heading",
+        "summary": "One or more pages are missing an <h1> element.",
+        "why_it_matters": "The H1 is the primary on-page topic signal. Its absence can weaken relevance scoring and confuse the crawler about the page's main subject.",
+        "recommended_fix": "Add one clear, keyword-relevant <h1> near the top of each page.",
+        "severity_explanation": "High because H1 is a strong topical relevance signal.",
+    },
+    "multiple_h1": {
+        "title": "Page has multiple H1 headings",
+        "summary": "One or more pages contain more than one <h1> element.",
+        "why_it_matters": "Multiple H1s dilute the topical focus and can confuse both users and crawlers about the primary subject.",
+        "recommended_fix": "Use exactly one <h1> per page; demote additional top-level headings to <h2> or lower.",
+        "severity_explanation": "Medium because the page is indexed but topical focus is weakened.",
+    },
+    "images_missing_alt_text": {
+        "title": "Images are missing alt text",
+        "summary": "One or more pages contain images without alt attributes.",
+        "why_it_matters": "Alt text is the only way search engines understand image content, and it provides accessibility for screen readers.",
+        "recommended_fix": "Add descriptive alt attributes to all meaningful images; use alt=\"\" for decorative images.",
+        "severity_explanation": "Medium because it affects image search visibility and accessibility compliance.",
+    },
+    "missing_schema": {
+        "title": "Page has no structured data",
+        "summary": "One or more pages are missing JSON-LD or microdata structured data markup.",
+        "why_it_matters": "Structured data enables rich results (FAQs, ratings, breadcrumbs) and helps search engines better understand page content.",
+        "recommended_fix": "Add relevant JSON-LD schema (Organization, WebPage, Article, Product, etc.) based on the page type.",
+        "severity_explanation": "Low to medium; indexing works without schema but rich-result opportunities are missed.",
+    },
+    "missing_canonical": {
+        "title": "Page has no canonical URL",
+        "summary": "One or more pages are missing a <link rel='canonical'> tag.",
+        "why_it_matters": "Without a canonical, search engines must guess which URL is preferred, which can split ranking signals across duplicates.",
+        "recommended_fix": "Add a self-referencing canonical tag to every page, pointing to the preferred URL.",
+        "severity_explanation": "Medium because duplicate or parameter URLs can dilute link equity over time.",
+    },
+    "missing_charset": {
+        "title": "Page is missing a charset declaration",
+        "summary": "One or more pages lack a <meta charset> or Content-Type charset header.",
+        "why_it_matters": "Without a charset declaration, browsers and crawlers may misinterpret special characters and render garbled text.",
+        "recommended_fix": "Add <meta charset=\"utf-8\"> as the first element inside <head> on every page.",
+        "severity_explanation": "Low in most modern browsers, but it can cause rendering or indexing anomalies for non-ASCII content.",
+    },
+    "thin_content": {
+        "title": "Page has thin or low-quality content",
+        "summary": "One or more pages have a very low word count and may be seen as thin or low-value by search engines.",
+        "why_it_matters": "Google's quality algorithms penalise pages with little original, helpful content, especially after Helpful Content updates.",
+        "recommended_fix": "Expand content to cover the topic comprehensively, add FAQs, examples, or supporting context to reach a meaningful depth.",
+        "severity_explanation": "Medium to high depending on how central the page is to the site's ranking strategy.",
+    },
 }
 
 
@@ -535,6 +619,66 @@ async def prioritized_issues(
         "issues": priorities,
         "total": len(priorities),
         "message": "Priority combines technical severity, affected pages, GSC visibility, estimated click loss, and fix readiness.",
+    }
+
+
+@router.post("/bulk-dismiss")
+async def bulk_dismiss_issues(
+    data: dict,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Dismiss multiple issues at once.
+
+    Body: { "issue_ids": ["uuid1", "uuid2", ...], "reason": "optional reason" }
+    Marks all matching (org-owned) issues as fix_status=dismissed.
+    """
+    from sqlalchemy import update as sa_update
+
+    raw_ids = data.get("issue_ids") or []
+    if not raw_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="issue_ids must be a non-empty list")
+    if len(raw_ids) > 500:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot dismiss more than 500 issues at once")
+
+    try:
+        issue_ids = [UUID(str(i)) for i in raw_ids]
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="All issue_ids must be valid UUIDs")
+
+    reason = str(data.get("reason") or "dismissed_by_user")[:255]
+
+    result = await db.execute(
+        sa_update(Issue)
+        .where(Issue.id.in_(issue_ids), Issue.org_id == auth.org_id)
+        .values(fix_status="dismissed")
+        .returning(Issue.id, Issue.site_id)
+    )
+    dismissed_rows = result.all()
+    await db.commit()
+
+    dismissed_ids = [str(row[0]) for row in dismissed_rows]
+    site_ids = list({str(row[1]) for row in dismissed_rows})
+
+    for site_id in site_ids:
+        db.add(ChangeLog(
+            org_id=auth.org_id,
+            site_id=UUID(site_id),
+            action="bulk_dismiss",
+            actor_type="user",
+            actor_id=auth.user_id,
+            new_value="dismissed",
+            extra_metadata={"count": len(dismissed_ids), "reason": reason, "issue_ids": dismissed_ids[:50]},
+        ))
+    if site_ids:
+        await db.commit()
+
+    return {
+        "dismissed_count": len(dismissed_ids),
+        "dismissed_ids": dismissed_ids,
+        "not_found_count": len(issue_ids) - len(dismissed_ids),
+        "reason": reason,
+        "message": f"Dismissed {len(dismissed_ids)} issue(s). They will be excluded from open-issue counts and fix queues.",
     }
 
 

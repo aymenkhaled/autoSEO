@@ -367,7 +367,7 @@ async def get_site_summary(
                 select(func.count(Issue.id)).where(
                     Issue.site_id == site_id,
                     Issue.org_id == auth.org_id,
-                    Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK, "applied"]),
+                    Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK, "applied", "dismissed"]),
                 )
             )
         ).scalar()
@@ -389,7 +389,11 @@ async def get_site_summary(
     severity_rows = (
         await db.execute(
             select(Issue.severity, func.count(Issue.id))
-            .where(Issue.site_id == site_id, Issue.org_id == auth.org_id)
+            .where(
+                Issue.site_id == site_id,
+                Issue.org_id == auth.org_id,
+                Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK, "applied", "dismissed"]),
+            )
             .group_by(Issue.severity)
         )
     ).all()

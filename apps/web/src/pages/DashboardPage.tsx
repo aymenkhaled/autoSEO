@@ -16,6 +16,30 @@ import {
 import { dashboardApi } from '@/lib/api-client'
 import { formatRelativeTime } from '@/lib/utils'
 
+const ISSUE_TYPE_LABELS: Record<string, string> = {
+  spa_no_prerender: 'SPA Not Prerendered',
+  duplicate_title: 'Duplicate Page Title',
+  keyword_cannibalization: 'Keyword Cannibalization',
+  stale_schema_date: 'Expired Schema Date',
+  unverified_review_schema: 'Review Schema Needs Proof',
+  missing_sitemap: 'Missing Sitemap',
+  missing_robots: 'Missing Robots',
+  missing_offer_schema: 'Missing Offer Schema',
+  broken_og_image: 'Broken OG Image',
+  missing_title: 'Missing Page Title',
+  title_too_short: 'Title Too Short',
+  title_too_long: 'Title Too Long',
+  missing_meta_description: 'Missing Meta Description',
+  meta_description_too_long: 'Meta Description Too Long',
+  missing_h1: 'Missing H1 Tag',
+  multiple_h1: 'Multiple H1 Tags',
+  images_missing_alt_text: 'Images Missing Alt Text',
+  missing_schema: 'Missing Structured Data',
+  missing_canonical: 'Missing Canonical URL',
+  missing_charset: 'Missing Charset Declaration',
+  thin_content: 'Thin Content',
+}
+
 function StatCard({ icon: Icon, label, value, sub, color, href }: {
   icon: any
   label: string
@@ -149,13 +173,25 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">
-                        {issue.type.replace(/_/g, ' ')}
+                        {ISSUE_TYPE_LABELS[issue.type] || issue.type.replace(/_/g, ' ')}
                       </p>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {issue.site_name}{issue.page_url ? ` · ${issue.page_url}` : ''}
                       </p>
                     </div>
-                    <SeverityBadge severity={issue.severity} />
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <SeverityBadge severity={issue.severity} />
+                      {issue.fix_status && issue.fix_status !== 'pending' && (
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full border font-semibold ${
+                          issue.fix_status === 'deployed' || issue.fix_status === 'deployed_after_merge' ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                          : issue.fix_status === 'rolled_back' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                          : 'bg-muted text-muted-foreground border-border'
+                        }`}>{issue.fix_status.replace(/_/g, ' ')}</span>
+                      )}
+                      {issue.created_at && (
+                        <span className="text-[9px] text-muted-foreground/50">{formatRelativeTime(issue.created_at)}</span>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
@@ -194,11 +230,36 @@ export default function DashboardPage() {
                       <p className="text-xs font-medium text-foreground truncate">{crawl.site_name}</p>
                       <p className="text-[10px] text-muted-foreground">
                         {crawl.pages_crawled} pages · {crawl.issues_found} issues
+                        {crawl.urls_discovered != null && crawl.urls_discovered > crawl.pages_crawled && ` · ${crawl.urls_discovered} found`}
+                        {crawl.duration_ms != null && ` · ${(crawl.duration_ms / 1000).toFixed(1)}s`}
                       </p>
+                      {crawl.error_message && <p className="text-[10px] text-red-400/80 truncate">{crawl.error_message}</p>}
+                      {crawl.trigger && crawl.trigger !== 'manual' && <p className="text-[9px] text-muted-foreground/50 capitalize">{crawl.trigger}</p>}
                     </div>
-                    <span className="text-[10px] text-muted-foreground">
-                      {crawl.created_at ? formatRelativeTime(crawl.created_at) : '—'}
-                    </span>
+                    {crawl.seo_score != null && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        crawl.seo_score >= 80 ? 'bg-green-500/10 text-green-500' :
+                        crawl.seo_score >= 50 ? 'bg-amber-500/10 text-amber-500' :
+                        'bg-red-500/10 text-red-500'
+                      }`}>
+                        {Math.round(crawl.seo_score)}
+                      </span>
+                    )}
+                    <div className="text-right">
+                      <span className="text-[10px] text-muted-foreground">
+                        {crawl.status === 'completed' && crawl.completed_at
+                          ? formatRelativeTime(crawl.completed_at)
+                          : crawl.created_at
+                          ? formatRelativeTime(crawl.created_at)
+                          : '—'}
+                      </span>
+                      {crawl.status === 'completed' && crawl.completed_at && (
+                        <p className="text-[9px] text-muted-foreground/50 leading-none mt-0.5">finished</p>
+                      )}
+                      {crawl.status === 'running' && (
+                        <p className="text-[9px] text-cyan-500/70 leading-none mt-0.5">running</p>
+                      )}
+                    </div>
                   </div>
                 ))
               )}

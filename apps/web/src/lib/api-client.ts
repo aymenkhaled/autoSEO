@@ -54,6 +54,10 @@ export const systemApi = {
   readiness: () => api.get('system/readiness').json<any>(),
 }
 
+export const teamApi = {
+  list: () => api.get('team').json<any>(),
+}
+
 // Sites
 export const sitesApi = {
   list: (page = 1, perPage = 20) =>
@@ -72,6 +76,7 @@ export const crawlsApi = {
   get: (id: string) => api.get(`crawls/${id}`).json<any>(),
   trigger: (siteId: string) =>
     api.post('crawls', { json: { site_id: siteId, trigger: 'manual' } }).json<any>(),
+  diff: (crawlId: string) => api.get(`crawls/${crawlId}/diff`).json<any>(),
 }
 
 // Issues
@@ -303,6 +308,41 @@ export const keywordsApi = {
     api.post('keywords/import', { json: data }).json<any>(),
   opportunities: (siteId: string) =>
     api.get('keywords/opportunities', { searchParams: { site_id: siteId } }).json<any>(),
+}
+
+export const siteIntelligenceApi = {
+  seoScoreHistory: (siteId: string, limit = 30) =>
+    api.get(`sites/${siteId}/seo-score-history`, { searchParams: { limit } }).json<any>(),
+  healthTrends: (siteId: string, limit = 20) =>
+    api.get(`sites/${siteId}/health-trends`, { searchParams: { limit } }).json<any>(),
+  orphanPages: (siteId: string, page = 1, perPage = 50) =>
+    api.get(`sites/${siteId}/orphan-pages`, { searchParams: { page, per_page: perPage } }).json<any>(),
+  duplicateAnalysis: (siteId: string) =>
+    api.get(`sites/${siteId}/duplicate-analysis`).json<any>(),
+  redirectChains: (siteId: string, page = 1) =>
+    api.get(`sites/${siteId}/redirect-chains`, { searchParams: { page } }).json<any>(),
+  internalLinking: (siteId: string, page = 1) =>
+    api.get(`sites/${siteId}/internal-linking`, { searchParams: { page } }).json<any>(),
+  pagespeedTrend: (siteId: string, strategy: 'mobile' | 'desktop' = 'mobile') =>
+    api.get(`sites/${siteId}/pagespeed-trend`, { searchParams: { strategy } }).json<any>(),
+  coverageGaps: (siteId: string) =>
+    api.get(`sites/${siteId}/coverage-gaps`).json<any>(),
+  pageDetail: (siteId: string, pageId: string) =>
+    api.get(`sites/${siteId}/pages/${pageId}`).json<any>(),
+}
+
+export const issuesBulkApi = {
+  bulkDismiss: (issueIds: string[], reason?: string) =>
+    api.post('issues/bulk-dismiss', { json: { issue_ids: issueIds, reason } }).json<any>(),
+}
+
+export const changeLogApi = {
+  list: (siteId?: string, page = 1, perPage = 30) =>
+    api.get('change-log', { searchParams: { ...(siteId ? { site_id: siteId } : {}), page, per_page: perPage } }).json<any>(),
+}
+
+export const fixVersionsApi = {
+  list: (issueId: string) => api.get(`fixes/versions/${issueId}`).json<any>(),
 }
 
 // Alias for pages that import apiClient directly

@@ -244,6 +244,8 @@ export default function ApiKeysPage() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Key</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Permissions</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Last Used</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Created</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Expires</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -270,6 +272,16 @@ export default function ApiKeysPage() {
                   <td className="px-4 py-3 hidden lg:table-cell">
                     <span className="text-xs text-muted-foreground">
                       {k.last_used_at ? formatRelativeTime(k.last_used_at) : 'Never used'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 hidden xl:table-cell">
+                    <span className="text-xs text-muted-foreground">
+                      {k.created_at ? new Date(k.created_at).toLocaleDateString() : '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 hidden xl:table-cell">
+                    <span className={`text-xs ${k.expires_at ? (new Date(k.expires_at) < new Date() ? 'text-red-400' : 'text-amber-400') : 'text-muted-foreground'}`}>
+                      {k.expires_at ? new Date(k.expires_at).toLocaleDateString() : 'Never'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

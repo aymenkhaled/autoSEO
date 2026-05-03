@@ -38,7 +38,7 @@ async def get_analytics_overview(
     # Issues breakdown
     issues_q = select(Issue.severity, func.count(Issue.id)).where(
         Issue.org_id == auth.org_id,
-        Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, "applied"]),
+        Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, "applied", "dismissed"]),
     ).group_by(Issue.severity)
     if site_id:
         issues_q = issues_q.where(Issue.site_id == site_id)
@@ -114,7 +114,7 @@ async def get_issues_trend(
     """Get issues count by category for trend analysis."""
     result = await db.execute(
         select(Issue.category, Issue.severity, func.count(Issue.id))
-        .where(Issue.org_id == auth.org_id)
+        .where(Issue.org_id == auth.org_id, Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, "applied", "dismissed"]))
         .group_by(Issue.category, Issue.severity)
     )
     rows = result.all()

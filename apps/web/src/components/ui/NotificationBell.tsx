@@ -130,10 +130,25 @@ export default function NotificationBell() {
                           {!notification.read && <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary mr-1.5 mb-0.5 align-middle" />}
                           {notification.title}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{notification.body}</p>
+                        {notification.body && <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{notification.body}</p>}
+                        {notification.data && (notification.data.seo_score != null || notification.data.issues_found != null || notification.data.pages_crawled != null) && (
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            {notification.data.seo_score != null && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${notification.data.seo_score >= 80 ? 'bg-green-500/10 text-green-400 border-green-500/20' : notification.data.seo_score >= 50 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                Score {notification.data.seo_score}
+                              </span>
+                            )}
+                            {notification.data.issues_found != null && (
+                              <span className="text-[10px] text-muted-foreground">{notification.data.issues_found} issues</span>
+                            )}
+                            {notification.data.pages_crawled != null && (
+                              <span className="text-[10px] text-muted-foreground">{notification.data.pages_crawled} pages</span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 mt-1.5">
                           <span className="text-[10px] text-muted-foreground">
-                            {notification.created_at ? timeAgo(notification.created_at) : 'just now'}
+                            {notification.read && notification.read_at ? `Read ${timeAgo(notification.read_at)}` : notification.created_at ? timeAgo(notification.created_at) : 'just now'}
                           </span>
                           <Link to={target} className="text-[10px] text-primary hover:underline flex items-center gap-0.5" onClick={() => setOpen(false)}>
                             View <ExternalLink className="h-2.5 w-2.5" />

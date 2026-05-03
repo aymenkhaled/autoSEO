@@ -168,9 +168,38 @@ export default function SitesPage() {
                   </span>
                 </div>
 
-                {site.last_crawled_at && (
-                  <p className="text-xs text-muted-foreground/60 mt-3">Last crawled {formatRelativeTime(site.last_crawled_at)}</p>
-                )}
+                <div className="mt-3 text-xs text-muted-foreground/60 space-y-0.5">
+                  {site.last_crawled_at && (
+                    <p>Last crawled {formatRelativeTime(site.last_crawled_at)}</p>
+                  )}
+                  {site.next_scheduled_crawl && (
+                    <p>Next crawl {formatRelativeTime(site.next_scheduled_crawl)}</p>
+                  )}
+                  {site.crawl_frequency && !site.next_scheduled_crawl && (
+                    <p className="capitalize">{site.crawl_frequency} crawl schedule</p>
+                  )}
+                  {site.crawl_max_pages != null && (
+                    <p>Max {site.crawl_max_pages.toLocaleString()} pages per crawl</p>
+                  )}
+                  {site.crawl_delay_ms != null && site.crawl_delay_ms > 0 && (
+                    <p>Crawl delay: {site.crawl_delay_ms}ms</p>
+                  )}
+                  {site.respect_robots_txt != null && (
+                    <p>{site.respect_robots_txt ? 'Respects robots.txt' : 'Ignores robots.txt'}</p>
+                  )}
+                  {site.verified_at && (
+                    <p>Verified {formatRelativeTime(site.verified_at)}{site.verification_method ? ` via ${site.verification_method.replace(/_/g, ' ')}` : ''}</p>
+                  )}
+                  {!site.verified_at && site.verification_requested_at && (
+                    <p>Verification requested {formatRelativeTime(site.verification_requested_at)}</p>
+                  )}
+                  {site.github_repo && (
+                    <p className="font-mono truncate max-w-[200px]">{site.github_repo}{site.github_branch ? `@${site.github_branch}` : ''}</p>
+                  )}
+                  {site.created_at && (
+                    <p>Added {formatRelativeTime(site.created_at)}</p>
+                  )}
+                </div>
               </motion.div>
             )
           })}

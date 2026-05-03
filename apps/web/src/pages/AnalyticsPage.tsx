@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Cell,
+  Tooltip, ResponsiveContainer, Cell, Legend, ComposedChart,
 } from 'recharts'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '@/lib/api-client'
@@ -28,10 +28,24 @@ function useScoreHistory(siteId: string, days: number) {
   })
 }
 
-function useIssuesTrend() {
+function useIssuesTrend(siteId?: string) {
   return useQuery({
-    queryKey: ['analytics', 'issues-trend'],
-    queryFn: () => apiClient.get('analytics/issues-trend').json<any>(),
+    queryKey: ['analytics', 'issues-trend', siteId],
+    queryFn: () =>
+      apiClient.get('analytics/issues-trend', {
+        searchParams: siteId ? { site_id: siteId } : {},
+      }).json<any>(),
+  })
+}
+
+function useSitePerformance(siteId: string) {
+  return useQuery({
+    queryKey: ['analytics', 'site-performance', siteId],
+    queryFn: () =>
+      apiClient.get(`sites/${siteId}/analytics/performance`, {
+        searchParams: { days: '30' },
+      }).json<any>(),
+    enabled: !!siteId,
   })
 }
 
@@ -82,7 +96,8 @@ export default function AnalyticsPage() {
 
   const { data: overview, isLoading: overviewLoading } = useAnalyticsOverview(siteId || undefined)
   const { data: history, isLoading: historyLoading } = useScoreHistory(siteId, days)
-  const { data: trend } = useIssuesTrend()
+  const { data: trend } = useIssuesTrend(siteId || undefined)
+  const { data: sitePerf } = useSitePerformance(siteId)
 
   const scoreData = history?.data ?? []
   const issuesByCategory = trend?.issues_by_category ?? {}
@@ -145,6 +160,25 @@ export default function AnalyticsPage() {
         </motion.div>
       </div>
 
+      {/* Severity breakdown strip */}
+      {overview?.issues_by_severity && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}
+          className="bg-card border border-border rounded-xl px-5 py-3 flex flex-wrap gap-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider self-center mr-2">Issues by severity</p>
+          {[
+            { label: 'Critical', key: 'critical', color: 'text-red-500 bg-red-500/10 border-red-500/20' },
+            { label: 'High', key: 'high', color: 'text-orange-500 bg-orange-500/10 border-orange-500/20' },
+            { label: 'Medium', key: 'medium', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' },
+            { label: 'Low', key: 'low', color: 'text-blue-500 bg-blue-500/10 border-blue-500/20' },
+          ].map(({ label, key, color }) => (
+            <div key={key} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${color}`}>
+              <span>{label}</span>
+              <span>{overview.issues_by_severity[key] ?? 0}</span>
+            </div>
+          ))}
+        </motion.div>
+      )}
+
       {/* Score History Chart */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
         className="bg-card border border-border rounded-xl p-6">
@@ -169,20 +203,84 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={scoreData} margin={{ top: 4, right: 4, left: -24, bottom: 4 }}>
+            <ComposedChart data={scoreData} margin={{ top: 4, right: 32, left: -24, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
               <XAxis dataKey="date"
                 tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }}
                 tickFormatter={(v: string) => v ? new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
                 axisLine={false} tickLine={false}
               />
-              <YAxis domain={[0, 100]} tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="score" domain={[0, 100]} tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="issues" orientation="right" tick={{ fill: 'var(--color-text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
               <Tooltip content={<CustomTooltip />} />
-              <Line type="monotone" dataKey="seo_score" name="SEO Score" stroke="#6366f1" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-            </LineChart>
+              <Legend wrapperStyle={{ fontSize: 11, color: 'var(--color-text-muted)' }} />
+              <Line yAxisId="score" type="monotone" dataKey="seo_score" name="SEO Score" stroke="#6366f1" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+              <Line yAxisId="issues" type="monotone" dataKey="issues_found" name="Issues Found" stroke="#f97316" strokeWidth={1.5} dot={false} strokeDasharray="4 2" activeDot={{ r: 3 }} />
+              <Line yAxisId="issues" type="monotone" dataKey="pages_crawled" name="Pages Crawled" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray="2 4" activeDot={{ r: 3 }} />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </motion.div>
+
+      {/* Site GA4 Performance Panel */}
+      {sitePerf && (
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.23 }}
+          className="bg-card border border-border rounded-xl p-5">
+          <div className="flex items-start justify-between mb-4 gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">GA4 Performance (30d)</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">{sitePerf.connected ? 'Live from Google Analytics' : 'GA4 not connected — showing placeholder values'}</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 items-center flex-shrink-0">
+              {!sitePerf.connected && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">GA4 not connected</span>
+              )}
+              {sitePerf.property_id && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-mono">Property: {sitePerf.property_id}</span>
+              )}
+              {sitePerf.synced_at && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                  Synced {new Date(sitePerf.synced_at).toLocaleDateString()}
+                </span>
+              )}
+              {sitePerf.generated_at && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted/50 text-muted-foreground/60 border border-border">
+                  Generated {new Date(sitePerf.generated_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {[
+              { label: 'Sessions', value: Math.round(sitePerf.totals?.sessions ?? 0).toLocaleString() },
+              { label: 'Views', value: Math.round(sitePerf.totals?.views ?? 0).toLocaleString() },
+              { label: 'Active Users', value: Math.round(sitePerf.totals?.active_users ?? 0).toLocaleString() },
+              { label: 'Key Events', value: Math.round(sitePerf.totals?.key_events ?? 0).toLocaleString() },
+              { label: 'Eng. Rate', value: sitePerf.totals?.engagement_rate ? `${(sitePerf.totals.engagement_rate * 100).toFixed(1)}%` : '—' },
+              { label: 'Revenue', value: sitePerf.totals?.total_revenue ? `$${sitePerf.totals.total_revenue.toFixed(2)}` : '—' },
+              ...(sitePerf.totals?.transactions != null ? [{ label: 'Transactions', value: Math.round(sitePerf.totals.transactions).toLocaleString() }] : []),
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-lg bg-muted/30 px-3 py-2 text-center">
+                <p className="text-base font-bold text-foreground">{stat.value}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+          {(sitePerf?.top_pages ?? []).length > 0 && (
+            <div className="mt-4">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Top pages by sessions</p>
+              <div className="space-y-1.5">
+                {(sitePerf.top_pages as any[]).slice(0, 5).map((pg: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-foreground font-mono truncate">{pg.page_path ?? pg.page ?? pg}</span>
+                    <span className="text-muted-foreground flex-shrink-0">{pg.sessions ?? pg.active_users ?? 0} sessions</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Issues by Category */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}

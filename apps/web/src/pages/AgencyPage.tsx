@@ -43,10 +43,15 @@ export default function AgencyPage() {
         <p className="text-sm text-muted-foreground mt-1">Client workspaces, white-label report context, and proof-of-work organization for agencies.</p>
       </div>
 
+      {data?.message && (
+        <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-4 py-3">
+          <p className="text-xs text-muted-foreground leading-relaxed">{data.message}</p>
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-border bg-card p-5">
           <Users className="h-5 w-5 text-primary" />
-          <p className="mt-4 text-2xl font-bold text-foreground">{clients.length}</p>
+          <p className="mt-4 text-2xl font-bold text-foreground">{data?.total ?? clients.length}</p>
           <p className="text-xs text-muted-foreground">Clients</p>
         </div>
         <div className="rounded-xl border border-border bg-card p-5">
@@ -102,9 +107,21 @@ export default function AgencyPage() {
           <div className="divide-y divide-border">
             {clients.map((client: any) => (
               <div key={client.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{client.brand_name || client.name}</p>
-                  <p className="text-xs text-muted-foreground">{client.contact_email || 'No contact email'} - {client.site_count} site(s)</p>
+                <div className="flex items-center gap-3">
+                  {client.logo_url ? (
+                    <img src={client.logo_url} alt={client.brand_name || client.name} className="w-9 h-9 rounded-lg object-cover border border-border flex-shrink-0" />
+                  ) : (
+                    <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0 text-sm font-bold">
+                      {(client.brand_name || client.name).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{client.brand_name || client.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {client.contact_email || 'No contact email'} · {client.site_count} site(s)
+                      {client.created_at && <span className="ml-1 text-muted-foreground/60">· joined {new Date(client.created_at).toLocaleDateString()}</span>}
+                    </p>
+                  </div>
                 </div>
                 <span className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground">Snapshot-safe reports</span>
               </div>

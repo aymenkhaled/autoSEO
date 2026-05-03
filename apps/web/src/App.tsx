@@ -22,6 +22,7 @@ import BillingPage from '@/pages/BillingPage'
 import IntegrationsPage from '@/pages/IntegrationsPage'
 import AutopilotPage from '@/pages/AutopilotPage'
 import AgencyPage from '@/pages/AgencyPage'
+import SiteIntelligencePage from '@/pages/SiteIntelligencePage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { loading, isAuthenticated } = useAuth()
@@ -79,6 +80,7 @@ export default function App() {
         <Route path="/dashboard" element={<DashboardRoute><DashboardPage /></DashboardRoute>} />
         <Route path="/dashboard/sites" element={<DashboardRoute><SitesPage /></DashboardRoute>} />
         <Route path="/dashboard/sites/:id" element={<DashboardRoute><SiteDetailPage /></DashboardRoute>} />
+        <Route path="/dashboard/sites/:id/intelligence" element={<DashboardRoute><SiteIntelligencePage /></DashboardRoute>} />
         <Route path="/dashboard/issues" element={<DashboardRoute><IssuesPage /></DashboardRoute>} />
         <Route path="/dashboard/fixes" element={<DashboardRoute><FixesPage /></DashboardRoute>} />
         <Route path="/dashboard/analytics" element={<DashboardRoute><AnalyticsPage /></DashboardRoute>} />

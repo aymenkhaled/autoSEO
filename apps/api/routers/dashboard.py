@@ -24,7 +24,7 @@ async def get_org_dashboard(
             await db.execute(
                 select(func.count(Issue.id)).where(
                     Issue.org_id == auth.org_id,
-                    Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK, "applied"]),
+                    Issue.fix_status.notin_([FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE, FIX_STATUS_ROLLED_BACK, "applied", "dismissed"]),
                 )
             )
         ).scalar()

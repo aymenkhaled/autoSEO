@@ -164,6 +164,60 @@ Implemented from gap-analysis files:
 
 Deferred (low-impact for current credit budget): robots.txt cache (Gap 2), conditional GET (Gap 5), crawl budget allocator (Gap 6), keyword cannibalization detection (Gap 13), fix versioning (Gap 22), verification delay (Gap 23), Claude rate limits (Gap 24), HMAC snippet tokens (Security 2), KMS encryption (Security 4).
 
+## Diamond Hunt Sessions (May 2026) — 100% Field Utilization
+Continuous multi-session effort to render every API field returned by the backend.
+
+### Session #1-3 Diamonds #1–85
+Covered: IssuesPage, FixesPage, ReportsPage, SitesPage, SiteDetailPage (all 6 tabs), AutopilotPage, SiteIntelligencePage, DashboardPage, NotificationBell. Major fields added: GSC/GA4 performance timestamps, pagespeed CWV, proof timeline, seo-score-history summary, health-trends crawl detail, coverage-gaps by_status_code, pagespeed-trend thresholds, crawl-budget stats, AI visibility evidence, redirect-chains summary, opportunities type/issue_type pills.
+
+### Session #4 Diamonds #86–95
+- `cap.mode/required_credentials/unsupported_message` in capabilities cards (SiteDetailPage)
+- `connection.last_tested_at` in write-integration card
+- `gscPerformance.generated_at` + `analyticsPerformance.synced_at/generated_at`
+- `searchConsole.scope` + `analytics.scope` as TinyPills
+- `opportunities.type/issue_type` as colored pills
+- `notification.read_at` shown as "Read X ago" in NotificationBell
+
+### Session #5 Diamonds #96–110
+- **#96** `proof_pairs.manual_snapshots` — card list with score/issues/impressions/perf per snapshot (AutopilotPage)
+- **#97** `timeline.snap.issue_type` — shown in Type column of proof timeline table
+- **#98** `timeline.snap.evidence.run_type` — shown in Type column (full/digest/manual)
+- **#99** `fix_workflow.status` — colored badge (cannot_auto_fix / ready / etc.) in IssuesPage aggregated view
+- **#100** `fix_workflow.required_fix_type` — metadata row (manual_review / ai_patch)
+- **#101** `fix_workflow.github_strategy` — metadata row (shown when not manual_only)
+- **#102** `fix_workflow.can_preview_ai` — metadata row with available/unavailable
+- **#103** `fix_workflow.ai_configured` — warning when can_preview_ai but not ai_configured
+- **#104** `fix_workflow.affected_count` — affected page count in metadata row
+- **#105** `fix_workflow.examples` — workflow-level examples with url/current_value
+- **#106** `aggregated.total_groups` — shown as "N groups" in note banner
+- **#107** `group.fix_type` — Auto-fixable cyan badge in aggregated issue cards
+- **#108** `pageDetail.status_code` — Status cell in page detail stats grid
+- **#109** `pageDetail.response_time_ms` — Response cell in page detail stats grid
+- **#110** `pageDetail.created_at` — Crawled date cell in page detail stats grid
+
+### Session #6 Diamonds #111–118
+- **#111** `score_improved[0].from/to/delta` — rendered in crawlDiff panel (SiteIntelligencePage)
+- **#112** `score_declined[0].from/to/delta` — rendered in crawlDiff panel (SiteIntelligencePage)
+- **#113** `aiVisibilityQuery.data.label` — shown in AI Visibility tab banner
+- **#114** `aiVisibilityQuery.data.readiness` — shown in AI Visibility tab banner
+- **#115–127** ReportsPage: `status/generated_at`, `summary.pages_total`, `search_console.last_sync_at`, `analytics.last_sync_at/transactions`, `indexnow.configured`, `top_opportunities[0].impact_label/affected_url/source/type`, `root_causes[0].why_it_matters/category/examples`
+- Orphan-pages bug fix: replaced wrong `page.external_links_count` with correct `page.status_code/issue_count/response_time_ms` columns
+
+### Session #7 Diamonds #128–145
+- **#128** `site.crawl_max_pages` — "Max N pages per crawl" line in SitesPage card footer
+- **#129** `site.crawl_delay_ms` — "Crawl delay: Nms" line in SitesPage card footer
+- **#130** `site.respect_robots_txt` — "Respects/Ignores robots.txt" line in SitesPage card footer
+- **#131** `site.verification_requested_at` — "Verification requested X ago" line in SitesPage card footer (shown only if not yet verified)
+- **#132** `orphan page.source.connection_type` — Source column badge in orphan-pages table (SiteIntelligencePage)
+- **#133** `orphan page.source.source_url` — Source column link in orphan-pages table
+- **#134** `orphan page.source.source_path` — Source column path in orphan-pages table (fallback when no source_url)
+- **#135** `setup.write_integration_configured` — Configured/Not configured pill in Write Integration card (SiteDetailPage setup tab)
+
+### Pages Confirmed ULTRA-COMPREHENSIVE (zero unrendered API fields)
+DashboardPage, SitesPage, SiteDetailPage (all tabs: setup/crawl/pages/page-detail/fixes/log/connections), IssuesPage (aggregated + raw), FixesPage (pending/deployed/reverted + FixVersionHistory), ReportsPage, SiteIntelligencePage (all 10 tabs: ai-visibility/content-briefs/duplicates/redirect-chains/health-trends/pagespeed-trend/orphan-pages/coverage-gaps/crawl-diff), AutopilotPage (actions/proof/digest/runs/crawl-budget), NotificationBell.
+
+TypeScript: zero errors throughout all sessions (#135 confirmed ✅).
+
 ## What's Needed Next (API Keys Required)
 1. `ANTHROPIC_API_KEY` → enables real AI fix generation (stubs work without it)
 2. `STRIPE_SECRET_KEY` → enables real billing enforcement

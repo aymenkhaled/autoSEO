@@ -145,6 +145,7 @@ from routers.content_briefs import router as content_briefs_router
 from routers.crawl_budget import router as crawl_budget_router
 from routers.agency import router as agency_router
 from routers.integrations import router as integrations_router
+from routers.site_intelligence import router as site_intelligence_router
 
 _ROUTERS = [
     (auth_router, "/auth"),
@@ -178,6 +179,7 @@ _ROUTERS = [
     (crawl_budget_router, ""),
     (agency_router, ""),
     (integrations_router, ""),
+    (site_intelligence_router, "/sites"),
 ]
 
 for base_prefix in ("", "/api", "/api/v1"):

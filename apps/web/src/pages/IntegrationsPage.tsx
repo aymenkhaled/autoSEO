@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Code2, Globe, Info, Plus, Send, Settings, Webhook, X } from 'lucide-react'
+import { Code2, Globe, Info, Plus, Send, Settings, Webhook, X, Zap } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 
 import { useSites } from '@/hooks/use-data'
 import { connectionSummary } from '@/lib/readiness'
-import { connectionsApi, githubApi, webhooksApi, type ConnectionPayload, type ConnectionType } from '@/lib/api-client'
+import { connectionsApi, githubApi, indexNowApi, webhooksApi, type ConnectionPayload, type ConnectionType } from '@/lib/api-client'
 
 const CONNECTION_FIELDS: Record<ConnectionType, Array<{ key: keyof ConnectionPayload; label: string; placeholder?: string; secret?: boolean }>> = {
   crawler: [],
@@ -179,11 +179,21 @@ function ConnectionModal({ site, onClose }: { site: any; onClose: () => void }) 
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">{selectedCapability.unsupported_message}</p>
-              <div className="rounded-lg border border-border bg-background p-3">
+              <div className="rounded-lg border border-border bg-background p-3 space-y-1.5">
                 <p className="text-xs font-semibold text-foreground">Certification: {selectedCapability.certification?.status?.replace(/_/g, ' ') || 'not tested'}</p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground">
                   {selectedCapability.certification?.message || 'Run sandbox or credential certification before trusting this connection for a customer.'}
                 </p>
+                {selectedCapability.certification?.last_tested_at && (
+                  <p className="text-[10px] text-muted-foreground/70">
+                    Last tested: {new Date(selectedCapability.certification.last_tested_at).toLocaleString()}
+                  </p>
+                )}
+                {selectedCapability.certification?.safe_fix_tested_at && (
+                  <p className="text-[10px] text-muted-foreground/70">
+                    Safe-fix tested: {new Date(selectedCapability.certification.safe_fix_tested_at).toLocaleString()}
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -404,6 +414,22 @@ export default function IntegrationsPage() {
   const sites = sitesData?.sites ?? []
   const webhooks = webhooksData?.webhooks ?? []
   const requestedSiteId = searchParams.get('site_id')
+  const firstSiteId = sites[0]?.id ?? ''
+
+  const indexNowQuery = useQuery({
+    queryKey: ['indexnow-status', firstSiteId],
+    queryFn: () => indexNowApi.status(firstSiteId),
+    enabled: !!firstSiteId,
+  })
+
+  const setupIndexNow = useMutation({
+    mutationFn: () => indexNowApi.setup(firstSiteId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['indexnow-status', firstSiteId] })
+      toast.success('IndexNow key generated')
+    },
+    onError: () => toast.error('Failed to setup IndexNow'),
+  })
 
   useEffect(() => {
     if (!requestedSiteId || selectedSite || sites.length === 0) return
@@ -494,11 +520,26 @@ export default function IntegrationsPage() {
                 <div key={webhook.id} className="px-5 py-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{webhook.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">{webhook.name}</p>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[9px] font-semibold ${webhook.enabled ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-muted/50 text-muted-foreground border-border'}`}>
+                          {webhook.enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
                       <p className="text-xs text-muted-foreground truncate mt-0.5">{webhook.url}</p>
+                      {webhook.events?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {(webhook.events as string[]).map((event: string) => (
+                            <span key={event} className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted/40 border border-border text-muted-foreground font-mono">{event}</span>
+                          ))}
+                        </div>
+                      )}
+                      {webhook.created_at && (
+                        <p className="text-[10px] text-muted-foreground/50 mt-1">Created {new Date(webhook.created_at).toLocaleDateString()}</p>
+                      )}
                     </div>
                     <button onClick={() => testWebhook.mutate(webhook.id)} disabled={testWebhook.isPending}
-                      className="h-8 px-3 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors disabled:opacity-50">
+                      className="h-8 px-3 rounded-lg border border-border text-xs text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex-shrink-0">
                       Test
                     </button>
                   </div>
@@ -511,11 +552,27 @@ export default function IntegrationsPage() {
                       {(deliveriesQuery.data?.deliveries ?? []).length === 0 ? (
                         <p className="text-xs text-muted-foreground">No deliveries yet. Send a test event first.</p>
                       ) : deliveriesQuery.data.deliveries.slice(0, 5).map((delivery: any) => (
-                        <div key={delivery.id} className="flex items-center justify-between gap-3 text-xs">
-                          <span className={delivery.success ? 'text-green-500' : 'text-red-500'}>
-                            {delivery.success ? 'Success' : 'Failed'} {delivery.status_code ?? 'no status'}
-                          </span>
-                          <span className="text-muted-foreground truncate">{delivery.event}</span>
+                        <div key={delivery.id} className="rounded-lg bg-muted/20 px-3 py-2 space-y-1">
+                          <div className="flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-semibold ${delivery.success ? 'text-green-500' : 'text-red-500'}`}>
+                                {delivery.success ? 'Success' : 'Failed'}
+                              </span>
+                              {delivery.status_code && (
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-mono ${delivery.status_code < 300 ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                                  {delivery.status_code}
+                                </span>
+                              )}
+                              <span className="text-muted-foreground font-mono text-[10px]">{delivery.event}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
+                              {delivery.duration_ms != null && <span>{delivery.duration_ms}ms</span>}
+                              {delivery.attempted_at && <span>{new Date(delivery.attempted_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>}
+                            </div>
+                          </div>
+                          {delivery.response_body && !delivery.success && (
+                            <p className="text-[10px] text-red-400/70 font-mono truncate">{String(delivery.response_body).slice(0, 120)}</p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -526,6 +583,82 @@ export default function IntegrationsPage() {
           )}
         </div>
       </div>
+
+      {/* IndexNow section */}
+      {indexNowQuery.data && (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">IndexNow</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
+                indexNowQuery.data.verified ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                : indexNowQuery.data.configured ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                : 'bg-muted text-muted-foreground border-border'
+              }`}>
+                {indexNowQuery.data.verified ? 'Verified' : indexNowQuery.data.configured ? 'Setup required' : 'Not configured'}
+              </span>
+              {!indexNowQuery.data.configured && (
+                <button onClick={() => setupIndexNow.mutate()} disabled={setupIndexNow.isPending}
+                  className="h-7 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
+                  {setupIndexNow.isPending ? 'Generating...' : 'Generate key'}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              IndexNow lets you instantly notify search engines of page changes. Bing and Yandex pick it up in minutes instead of days.
+            </p>
+            {indexNowQuery.data.readiness_label && (
+              <p className="text-xs font-medium text-amber-300">{indexNowQuery.data.readiness_label}</p>
+            )}
+            {indexNowQuery.data.key && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Key:</span>
+                  <code className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-foreground">{indexNowQuery.data.key}</code>
+                </div>
+                {indexNowQuery.data.key_location && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Key file URL:</span>
+                    <a href={indexNowQuery.data.key_location} target="_blank" rel="noopener noreferrer"
+                      className="text-xs font-mono text-primary hover:underline truncate max-w-xs">
+                      {indexNowQuery.data.key_location}
+                    </a>
+                  </div>
+                )}
+                {indexNowQuery.data.instructions && !indexNowQuery.data.verified && (
+                  <div className="rounded-lg bg-muted/30 border border-border p-3">
+                    <p className="text-xs font-semibold text-foreground mb-1">Setup instructions</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{indexNowQuery.data.instructions}</p>
+                  </div>
+                )}
+                {indexNowQuery.data.last_verified_at && (
+                  <p className="text-[10px] text-muted-foreground/60">
+                    Last verified: {new Date(indexNowQuery.data.last_verified_at).toLocaleDateString()}
+                  </p>
+                )}
+                {indexNowQuery.data.recent_submissions?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-foreground mb-1">Recent submissions</p>
+                    <div className="space-y-1">
+                      {(indexNowQuery.data.recent_submissions as any[]).slice(0, 5).map((sub: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                          <span className="font-mono truncate">{sub.url || sub}</span>
+                          {sub.submitted_at && <span>{new Date(sub.submitted_at).toLocaleDateString()}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <AnimatePresence>
         {showWebhookModal && <WebhookModal onClose={() => setShowWebhookModal(false)} />}

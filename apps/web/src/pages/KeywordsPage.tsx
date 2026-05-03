@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Target, TrendingUp, TrendingDown, Minus, Globe, Trash2, X, ChevronDown, Info, Upload } from 'lucide-react'
+import { Plus, Target, TrendingUp, TrendingDown, Minus, Globe, Trash2, X, ChevronDown, Info, Upload, Sparkles, ExternalLink } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient } from '@/lib/api-client'
+import { apiClient, keywordProviderApi } from '@/lib/api-client'
 import { useSites } from '@/hooks/use-data'
 import { toast } from 'sonner'
 
@@ -82,6 +82,14 @@ export default function KeywordsPage() {
 
   const keywords = data?.keywords ?? []
 
+  const opportunitiesQuery = useQuery({
+    queryKey: ['keyword-opportunities', siteId],
+    queryFn: () => keywordProviderApi.opportunities(siteId),
+    enabled: !!siteId,
+  })
+  const opportunities: any[] = opportunitiesQuery.data?.opportunities ?? []
+  const [showOpps, setShowOpps] = useState(true)
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!siteId || !form.keyword.trim()) return
@@ -124,12 +132,123 @@ export default function KeywordsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
-        <Info className="h-4 w-4 text-amber-500 mt-0.5" />
-        <p className="text-xs text-amber-100 leading-relaxed">
-          Current status: <span className="font-semibold">Tracking only</span>. Keywords are stored and organized by site, intent, and priority. Ranking history stays empty until a SERP provider or manual ranking import is connected.
-        </p>
-      </div>
+      {(data?.readiness || data?.provider_gap) && (
+        <div className="space-y-2">
+          {data.readiness && (
+            <div className={`rounded-xl border p-4 flex items-start gap-3 ${
+              data.readiness.state === 'working' ? 'border-green-500/20 bg-green-500/10' : 'border-amber-500/20 bg-amber-500/10'
+            }`}>
+              <Info className={`h-4 w-4 mt-0.5 ${data.readiness.state === 'working' ? 'text-green-400' : 'text-amber-500'}`} />
+              <p className="text-xs leading-relaxed text-amber-100">
+                Current status: <span className="font-semibold">{data.readiness.label}</span>. {data.readiness.description}
+              </p>
+            </div>
+          )}
+          {data.provider_gap && data.provider_gap.state !== 'working' && (
+            <div className="rounded-xl border border-slate-500/20 bg-slate-500/10 p-4 flex items-start gap-3">
+              <Info className="h-4 w-4 text-slate-400 mt-0.5" />
+              <p className="text-xs text-slate-300 leading-relaxed">
+                <span className="font-semibold">{data.provider_gap.label}</span>: {data.provider_gap.description}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      {!data && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
+          <Info className="h-4 w-4 text-amber-500 mt-0.5" />
+          <p className="text-xs text-amber-100 leading-relaxed">
+            Current status: <span className="font-semibold">Tracking only</span>. Keywords are stored and organized by site, intent, and priority. Ranking history stays empty until a SERP provider or manual ranking import is connected.
+          </p>
+        </div>
+      )}
+
+      {siteId && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowOpps(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 border-b border-border hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-violet-400" />
+              <h2 className="text-sm font-semibold text-foreground">Keyword Opportunities</h2>
+              {opportunitiesQuery.data?.total != null && (
+                <span className="ml-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                  {opportunitiesQuery.data.total}
+                </span>
+              )}
+            </div>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showOpps ? 'rotate-180' : ''}`} />
+          </button>
+          <AnimatePresence initial={false}>
+            {showOpps && (
+              <motion.div
+                key="opps"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                {opportunitiesQuery.isLoading ? (
+                  <div className="px-5 py-8 flex items-center justify-center">
+                    <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  </div>
+                ) : opportunities.length === 0 ? (
+                  <div className="px-5 py-8 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {opportunitiesQuery.data?.message || 'No opportunities found yet. Run a crawl and sync Search Console to surface keyword gaps.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border">
+                    {opportunities.slice(0, 10).map((opp: any, i: number) => (
+                      <motion.div
+                        key={opp.keyword || i}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="flex items-center gap-4 px-5 py-3 hover:bg-muted/40 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{opp.keyword}</p>
+                          {opp.page_url && (
+                            <a
+                              href={opp.page_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary truncate mt-0.5 w-fit"
+                            >
+                              {opp.page_url} <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                          {opp.impressions != null && (
+                            <span className="text-muted-foreground">{opp.impressions.toLocaleString()} imp</span>
+                          )}
+                          {opp.clicks != null && (
+                            <span className="text-muted-foreground">{opp.clicks.toLocaleString()} clicks</span>
+                          )}
+                          {opp.position != null && (
+                            <span className="font-semibold text-foreground">#{Math.round(opp.position)}</span>
+                          )}
+                          {opp.opportunity_type && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20 capitalize">
+                              {opp.opportunity_type.replace(/_/g, ' ')}
+                            </span>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -224,6 +343,7 @@ export default function KeywordsPage() {
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Position</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Change</th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell">Volume</th>
+              <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden xl:table-cell">Checked</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -231,7 +351,7 @@ export default function KeywordsPage() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 bg-muted rounded animate-pulse" style={{ width: j === 0 ? '60%' : '40%' }} />
                     </td>
@@ -240,7 +360,7 @@ export default function KeywordsPage() {
               ))
             ) : keywords.length === 0 ? (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
                       <Target className="h-6 w-6 text-primary" />
@@ -263,13 +383,30 @@ export default function KeywordsPage() {
                   <td className="px-4 py-3">
                     <p className="font-medium text-foreground">{kw.keyword}</p>
                     {kw.target_url && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{kw.target_url}</p>}
+                    {kw.priority >= 2 && (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full border text-[9px] font-semibold mt-0.5 ${kw.priority === 3 ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                        {kw.priority === 3 ? 'High priority' : 'Med priority'}
+                      </span>
+                    )}
+                    {kw.created_at && (
+                      <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+                        Tracked since {new Date(kw.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${intent.color}`}>{intent.label}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     {rank?.position ? (
-                      <span className="text-base font-bold text-foreground">#{rank.position}</span>
+                      <div>
+                        <span className="text-base font-bold text-foreground">#{rank.position}</span>
+                        {rank.url && rank.url !== kw.target_url && (
+                          <p className="text-[10px] text-muted-foreground truncate max-w-[120px] mx-auto mt-0.5" title={rank.url}>
+                            {rank.url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                          </p>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground text-xs">Tracked only</span>
                     )}
@@ -280,6 +417,11 @@ export default function KeywordsPage() {
                   <td className="px-4 py-3 text-center hidden lg:table-cell">
                     <span className="text-sm text-muted-foreground">
                       {rank?.search_volume ? rank.search_volume.toLocaleString() : '—'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center hidden xl:table-cell">
+                    <span className="text-xs text-muted-foreground">
+                      {rank?.checked_at ? new Date(rank.checked_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

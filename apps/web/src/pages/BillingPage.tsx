@@ -127,6 +127,12 @@ export default function BillingPage() {
             {usageData.sites && <UsageBar used={usageData.sites.used} limit={usageData.sites.limit} label="Sites" />}
             {usageData.crawls && <UsageBar used={usageData.crawls.used} limit={usageData.crawls.limit} label="Crawls this month" />}
             {usageData.ai_fixes && <UsageBar used={usageData.ai_fixes.used} limit={usageData.ai_fixes.limit} label="AI fixes this month" />}
+            {limits.pages_per_crawl != null && (
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                <span className="text-muted-foreground">Pages per crawl limit</span>
+                <span className="font-semibold text-foreground">{limits.pages_per_crawl.toLocaleString()}</span>
+              </div>
+            )}
           </div>
         )}
 

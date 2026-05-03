@@ -133,12 +133,36 @@ export default function CompetitorsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
-        <Info className="h-4 w-4 text-amber-500 mt-0.5" />
-        <p className="text-xs text-amber-100 leading-relaxed">
-          Current status: <span className="font-semibold">Working for lightweight crawl comparison</span>, but keyword counts and backlinks still <span className="font-semibold">need a provider</span>.
-        </p>
-      </div>
+      {(data?.readiness || data?.provider_gap) && (
+        <div className="space-y-2">
+          {data.readiness && (
+            <div className={`rounded-xl border p-4 flex items-start gap-3 ${
+              data.readiness.state === 'working' ? 'border-green-500/20 bg-green-500/10' : 'border-amber-500/20 bg-amber-500/10'
+            }`}>
+              <Info className={`h-4 w-4 mt-0.5 ${data.readiness.state === 'working' ? 'text-green-400' : 'text-amber-500'}`} />
+              <p className={`text-xs leading-relaxed ${data.readiness.state === 'working' ? 'text-green-100' : 'text-amber-100'}`}>
+                Current status: <span className="font-semibold">{data.readiness.label}</span>. {data.readiness.description}
+              </p>
+            </div>
+          )}
+          {data.provider_gap && data.provider_gap.state !== 'working' && (
+            <div className="rounded-xl border border-slate-500/20 bg-slate-500/10 p-4 flex items-start gap-3">
+              <Info className="h-4 w-4 text-slate-400 mt-0.5" />
+              <p className="text-xs text-slate-300 leading-relaxed">
+                <span className="font-semibold">{data.provider_gap.label}</span>: {data.provider_gap.description}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      {!data && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
+          <Info className="h-4 w-4 text-amber-500 mt-0.5" />
+          <p className="text-xs text-amber-100 leading-relaxed">
+            Current status: <span className="font-semibold">Working for lightweight crawl comparison</span>, but keyword counts and backlinks still <span className="font-semibold">need a provider</span>.
+          </p>
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
         <div>
@@ -299,11 +323,14 @@ export default function CompetitorsPage() {
                   <span className="font-medium text-foreground">{c.backlinks_count?.toLocaleString() ?? '—'}</span>
                 </div>
               </div>
-              {c.last_analyzed_at && (
-                <p className="text-[10px] text-muted-foreground/60 mt-3 pt-3 border-t border-border">
-                  Last analyzed: {new Date(c.last_analyzed_at).toLocaleDateString()}
-                </p>
-              )}
+              <p className="text-[10px] text-muted-foreground/60 mt-3 pt-3 border-t border-border flex items-center justify-between gap-2">
+                {c.last_analyzed_at && (
+                  <span>Last analyzed: {new Date(c.last_analyzed_at).toLocaleDateString()}</span>
+                )}
+                {c.created_at && (
+                  <span className="text-muted-foreground/40">Added {new Date(c.created_at).toLocaleDateString()}</span>
+                )}
+              </p>
             </motion.div>
           ))}
         </div>

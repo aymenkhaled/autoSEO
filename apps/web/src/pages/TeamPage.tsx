@@ -181,9 +181,13 @@ export default function TeamPage() {
                   className="hover:bg-muted/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                        {(m.full_name || m.email).charAt(0).toUpperCase()}
-                      </div>
+                      {m.avatar_url ? (
+                        <img src={m.avatar_url} alt={m.full_name || m.email} className="w-8 h-8 rounded-full border border-border object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+                          {(m.full_name || m.email).charAt(0).toUpperCase()}
+                        </div>
+                      )}
                       <div>
                         <p className="font-medium text-foreground">{m.full_name || m.email}</p>
                         {m.full_name && <p className="text-xs text-muted-foreground">{m.email}</p>}
@@ -202,13 +206,21 @@ export default function TeamPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
-                    {m.delivery_state ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${readinessMeta(m.delivery_state.state).className}`}>
-                        {m.delivery_state.label}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Working</span>
-                    )}
+                    <div className="space-y-1">
+                      {m.delivery_state ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-semibold ${readinessMeta(m.delivery_state.state).className}`}>
+                          {m.delivery_state.label}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Working</span>
+                      )}
+                      {m.invited_at && (
+                        <p className="text-[10px] text-muted-foreground/60">Invited {new Date(m.invited_at).toLocaleDateString()}</p>
+                      )}
+                      {m.accepted_at && (
+                        <p className="text-[10px] text-green-400/70">Accepted {new Date(m.accepted_at).toLocaleDateString()}</p>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">
                     {!m.is_self && (
