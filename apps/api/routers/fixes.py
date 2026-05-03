@@ -17,6 +17,7 @@ from models.tables import Issue, ChangeLog, FixVersion, Site
 from packages.shared.seo_domain import (
     FIX_STATUS_APPROVED,
     FIX_STATUS_DEPLOYED,
+    FIX_STATUS_DEPLOYED_AFTER_MERGE,
     FIX_STATUS_ROLLED_BACK,
     issue_can_auto_deploy,
     normalize_fix_status,
@@ -151,7 +152,7 @@ async def rollback_fix(
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
 
-    if normalize_fix_status(issue.fix_status) != FIX_STATUS_DEPLOYED:
+    if normalize_fix_status(issue.fix_status) not in (FIX_STATUS_DEPLOYED, FIX_STATUS_DEPLOYED_AFTER_MERGE):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only deployed fixes can be rolled back",

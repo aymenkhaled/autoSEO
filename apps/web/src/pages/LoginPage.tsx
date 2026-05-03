@@ -126,12 +126,6 @@ export default function LoginPage() {
             )}
           </AnimatePresence>
 
-          <div className="rounded-lg border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-            {authMode === 'supabase'
-              ? 'Supabase browser auth is active in this environment.'
-              : 'Local email/password auth is active in this environment.'}
-          </div>
-
           {supportsGoogleAuth && (
             <>
               <button onClick={signInWithGoogle}

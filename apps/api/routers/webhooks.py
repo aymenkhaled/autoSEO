@@ -38,6 +38,13 @@ class WebhookCreate(BaseModel):
     enabled: bool = True
 
 
+class WebhookUpdate(BaseModel):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    events: Optional[list[str]] = None
+    enabled: Optional[bool] = None
+
+
 def _is_replayed(event_id: str | None) -> bool:
     if not event_id:
         return False
@@ -213,6 +220,54 @@ async def create_outbound_webhook(
         "enabled": webhook.enabled,
         "secret": webhook.secret,
     }
+
+
+@router.patch("/{webhook_id}")
+async def update_outbound_webhook(
+    webhook_id: UUID,
+    data: WebhookUpdate,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    webhook = (
+        await db.execute(select(Webhook).where(Webhook.id == webhook_id, Webhook.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not webhook:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+    if data.url is not None:
+        _validate_webhook_url(data.url)
+        webhook.url = data.url
+    if data.name is not None:
+        webhook.name = data.name
+    if data.events is not None:
+        webhook.events = data.events
+    if data.enabled is not None:
+        webhook.enabled = data.enabled
+    await db.commit()
+    await db.refresh(webhook)
+    return {
+        "id": str(webhook.id),
+        "name": webhook.name,
+        "url": webhook.url,
+        "events": webhook.events,
+        "enabled": webhook.enabled,
+        "created_at": webhook.created_at.isoformat() if webhook.created_at else None,
+    }
+
+
+@router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_outbound_webhook(
+    webhook_id: UUID,
+    auth: AuthContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    webhook = (
+        await db.execute(select(Webhook).where(Webhook.id == webhook_id, Webhook.org_id == auth.org_id))
+    ).scalar_one_or_none()
+    if not webhook:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Webhook not found")
+    await db.delete(webhook)
+    await db.commit()
 
 
 @router.post("/{webhook_id}/test")

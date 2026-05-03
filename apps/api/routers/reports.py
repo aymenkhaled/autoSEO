@@ -87,9 +87,7 @@ async def list_reports(
                 "format": report.format,
                 "recipients": report.recipients,
                 "schedule_cron": report.schedule_cron,
-                "delivery_state": _report_delivery_state(report)["state"],
-                "delivery_state_label": _report_delivery_state(report)["label"],
-                "delivery_state_description": _report_delivery_state(report)["description"],
+                **{f"delivery_{k}": v for k, v in _report_delivery_state(report).items() if k in ("state", "label", "description")},
                 "last_sent_at": report.last_sent_at.isoformat() if report.last_sent_at else None,
                 "created_at": report.created_at.isoformat() if report.created_at else None,
             }

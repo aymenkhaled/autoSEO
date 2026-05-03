@@ -65,16 +65,30 @@ async def list_keywords(
     )
     keywords = result.scalars().all()
 
-    # Get latest rankings for each keyword
+    # Batch-fetch latest rankings — one query instead of N queries
+    kw_ids = [kw.id for kw in keywords]
+    ranking_map: dict = {}
+    if kw_ids:
+        rn_col = func.row_number().over(
+            partition_by=KeywordRanking.keyword_id,
+            order_by=KeywordRanking.checked_at.desc(),
+        ).label("rn")
+        inner = (
+            select(KeywordRanking, rn_col)
+            .where(KeywordRanking.keyword_id.in_(kw_ids))
+            .subquery()
+        )
+        rows = (
+            await db.execute(
+                select(inner).where(inner.c.rn == 1)
+            )
+        ).mappings().all()
+        for row in rows:
+            ranking_map[row["keyword_id"]] = row
+
     kw_list = []
     for kw in keywords:
-        latest_ranking = (await db.execute(
-            select(KeywordRanking)
-            .where(KeywordRanking.keyword_id == kw.id)
-            .order_by(KeywordRanking.checked_at.desc())
-            .limit(1)
-        )).scalar_one_or_none()
-
+        r = ranking_map.get(kw.id)
         kw_list.append({
             "id": str(kw.id),
             "keyword": kw.keyword,
@@ -83,12 +97,12 @@ async def list_keywords(
             "priority": kw.priority,
             "created_at": kw.created_at.isoformat() if kw.created_at else None,
             "latest_ranking": {
-                "position": latest_ranking.position,
-                "previous_position": latest_ranking.previous_position,
-                "search_volume": latest_ranking.search_volume,
-                "url": latest_ranking.url,
-                "checked_at": latest_ranking.checked_at.isoformat() if latest_ranking.checked_at else None,
-            } if latest_ranking else None,
+                "position": r["position"],
+                "previous_position": r["previous_position"],
+                "search_volume": r["search_volume"],
+                "url": r["url"],
+                "checked_at": r["checked_at"].isoformat() if r["checked_at"] else None,
+            } if r else None,
         })
     return {
         "keywords": kw_list,
@@ -308,25 +322,37 @@ async def keyword_opportunities(
             .order_by(Keyword.priority.desc(), Keyword.created_at.desc())
         )
     ).scalars().all()
+    # Batch-fetch latest rankings to avoid N+1
+    opp_kw_ids = [kw.id for kw in keywords]
+    opp_ranking_map: dict = {}
+    if opp_kw_ids:
+        rn_col2 = func.row_number().over(
+            partition_by=KeywordRanking.keyword_id,
+            order_by=KeywordRanking.checked_at.desc(),
+        ).label("rn")
+        inner2 = (
+            select(KeywordRanking, rn_col2)
+            .where(KeywordRanking.keyword_id.in_(opp_kw_ids))
+            .subquery()
+        )
+        opp_rows = (
+            await db.execute(select(inner2).where(inner2.c.rn == 1))
+        ).mappings().all()
+        for row in opp_rows:
+            opp_ranking_map[row["keyword_id"]] = row
+
     opportunities = []
     for keyword in keywords:
-        latest = (
-            await db.execute(
-                select(KeywordRanking)
-                .where(KeywordRanking.keyword_id == keyword.id)
-                .order_by(KeywordRanking.checked_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if latest and latest.position and 4 <= latest.position <= 20:
+        latest = opp_ranking_map.get(keyword.id)
+        if latest and latest["position"] and 4 <= latest["position"] <= 20:
             opportunities.append({
                 "type": "striking_distance_keyword",
                 "keyword": keyword.keyword,
-                "target_url": latest.url or keyword.target_url,
-                "position": latest.position,
-                "previous_position": latest.previous_position,
-                "search_volume": latest.search_volume,
-                "priority_score": 180 + max(0, 20 - latest.position),
+                "target_url": latest["url"] or keyword.target_url,
+                "position": latest["position"],
+                "previous_position": latest["previous_position"],
+                "search_volume": latest["search_volume"],
+                "priority_score": 180 + max(0, 20 - latest["position"]),
                 "next_step": "Refresh the target page, improve title/meta intent match, and add internal links.",
             })
         elif not latest:

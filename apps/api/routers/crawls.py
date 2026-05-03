@@ -13,6 +13,7 @@ from dependencies import get_db, get_current_user
 from schemas.auth import AuthContext
 from schemas.crawl import CrawlCreate, CrawlResponse, CrawlListResponse
 from models.tables import Crawl, Site, Page
+from models.database import AsyncSessionLocal
 
 router = APIRouter(tags=["crawls"])
 
@@ -307,7 +308,6 @@ async def crawl_progress_sse(
 
             await asyncio.sleep(2)
 
-    from models.database import AsyncSessionLocal
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",

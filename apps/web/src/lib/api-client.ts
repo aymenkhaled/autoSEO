@@ -274,14 +274,35 @@ export const notificationsApi = {
 export const webhooksApi = {
   list: () => api.get('webhooks').json<any>(),
   create: (data: any) => api.post('webhooks', { json: data }).json<any>(),
+  update: (id: string, data: { name?: string; url?: string; events?: string[]; enabled?: boolean }) =>
+    api.patch(`webhooks/${id}`, { json: data }).json<any>(),
+  delete: (id: string) => api.delete(`webhooks/${id}`),
   test: (id: string) => api.post(`webhooks/${id}/test`).json<any>(),
   deliveries: (id: string) => api.get(`webhooks/${id}/deliveries`).json<any>(),
 }
 
 export const competitorsApi = {
+  list: (siteId: string) =>
+    api.get('competitors', { searchParams: { site_id: siteId } }).json<any>(),
+  add: (data: { site_id: string; domain: string; name?: string }) =>
+    api.post('competitors', { json: data }).json<any>(),
+  delete: (id: string) => api.delete(`competitors/${id}`),
   analyze: (id: string) => api.post(`competitors/${id}/analyze`).json<any>(),
   comparePages: (id: string, data: { site_page_url: string; competitor_page_url: string }) =>
     api.post(`competitors/${id}/compare-pages`, { json: data }).json<any>(),
+}
+
+export const keywordsApi = {
+  list: (siteId: string) =>
+    api.get('keywords', { searchParams: { site_id: siteId } }).json<any>(),
+  create: (data: { site_id: string; keyword: string; target_url?: string; intent?: string; priority?: number }) =>
+    api.post('keywords', { json: data }).json<any>(),
+  delete: (id: string) => api.delete(`keywords/${id}`),
+  history: (id: string) => api.get(`keywords/${id}/history`).json<any>(),
+  import: (data: { site_id: string; csv_text: string }) =>
+    api.post('keywords/import', { json: data }).json<any>(),
+  opportunities: (siteId: string) =>
+    api.get('keywords/opportunities', { searchParams: { site_id: siteId } }).json<any>(),
 }
 
 // Alias for pages that import apiClient directly

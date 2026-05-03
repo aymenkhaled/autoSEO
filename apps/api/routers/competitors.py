@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from dependencies import get_db, get_current_user
@@ -153,7 +153,7 @@ async def analyze_competitor(
     ).scalar_one_or_none()
 
     competitor.seo_score = signals["seo_score"]
-    competitor.last_analyzed_at = datetime.utcnow()
+    competitor.last_analyzed_at = datetime.now(timezone.utc)
     await db.commit()
 
     return {
