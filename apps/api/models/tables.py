@@ -1,6 +1,6 @@
 """SQLAlchemy models for all AutoSEO database tables."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Text, Boolean, Integer, SmallInteger, BigInteger,
     Numeric, ForeignKey, ARRAY, DateTime, Index
@@ -19,8 +19,8 @@ class Organization(Base):
     plan = Column(Text, nullable=False, default="free")
     stripe_customer_id = Column(Text)
     stripe_subscription_id = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     users = relationship("User", back_populates="organization")
@@ -37,7 +37,7 @@ class User(Base):
     full_name = Column(Text)
     avatar_url = Column(Text)
     password_hash = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     organization = relationship("Organization", back_populates="users")
@@ -72,7 +72,7 @@ class Site(Base):
     verification_requested_at = Column(DateTime(timezone=True))
     verified_at = Column(DateTime(timezone=True))
     last_crawled_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     organization = relationship("Organization", back_populates="sites")
@@ -100,7 +100,7 @@ class Crawl(Base):
     completed_at = Column(DateTime(timezone=True))
     duration_ms = Column(Integer)
     error_message = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     site = relationship("Site", back_populates="crawls")
@@ -165,7 +165,7 @@ class Page(Base):
     # Gap 5: conditional GET cache headers (deferred → done)
     etag = Column(Text)
     last_modified = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     crawl = relationship("Crawl", back_populates="pages")
@@ -194,8 +194,8 @@ class PageSource(Base):
     source_url = Column(Text)
     connection_type = Column(Text, nullable=False)
     source_metadata = Column("metadata", JSONB)
-    last_synced_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    last_synced_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     page = relationship("Page", back_populates="page_sources")
 
@@ -230,7 +230,7 @@ class Issue(Base):
     verified_score = Column(SmallInteger)
     rollback_value = Column(Text)
     rolled_back_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     crawl = relationship("Crawl", back_populates="issues")
@@ -257,7 +257,7 @@ class ChangeLog(Base):
     old_value = Column(Text)
     new_value = Column(Text)
     extra_metadata = Column("metadata", JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_change_log_site_id", "site_id"),
@@ -284,7 +284,7 @@ class SnippetEvent(Base):
     device_type = Column(Text)  # mobile|tablet|desktop — Gap 19
     user_agent = Column(Text)
     viewport_width = Column(SmallInteger)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_snippet_events_site_id", "site_id", "created_at"),
@@ -302,7 +302,7 @@ class ApiKey(Base):
     scopes = Column(ARRAY(Text), nullable=False)
     last_used_at = Column(DateTime(timezone=True))
     expires_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Keyword(Base):
@@ -316,7 +316,7 @@ class Keyword(Base):
     intent = Column(Text, default="informational")
     priority = Column(SmallInteger, default=1)
     added_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     rankings = relationship("KeywordRanking", back_populates="keyword_ref", cascade="all, delete-orphan")
 
@@ -337,7 +337,7 @@ class KeywordRanking(Base):
     serp_features = Column(ARRAY(Text))
     country = Column(Text, default="US")
     device = Column(Text, default="desktop")
-    checked_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    checked_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     keyword_ref = relationship("Keyword", back_populates="rankings")
 
@@ -355,7 +355,7 @@ class Competitor(Base):
     backlinks_count = Column(Integer)
     added_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     last_analyzed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Backlink(Base):
@@ -372,9 +372,9 @@ class Backlink(Base):
     domain_rating = Column(SmallInteger)
     is_new = Column(Boolean, default=False)
     is_lost = Column(Boolean, default=False)
-    first_seen_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    last_seen_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    first_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class TeamMember(Base):
@@ -387,7 +387,7 @@ class TeamMember(Base):
     role = Column(Text, nullable=False, default="member")
     status = Column(Text, nullable=False, default="pending")
     invited_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    invited_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    invited_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     accepted_at = Column(DateTime(timezone=True))
 
 
@@ -399,8 +399,8 @@ class IssueComment(Base):
     org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     body = Column(Text, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Notification(Base):
@@ -415,7 +415,7 @@ class Notification(Base):
     data = Column(JSONB)
     read = Column(Boolean, default=False)
     read_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class NotificationPreference(Base):
@@ -432,8 +432,8 @@ class NotificationPreference(Base):
     email_new_issues = Column(Boolean, default=True)
     email_fix_applied = Column(Boolean, default=True)
     email_weekly_digest = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class ScheduledReport(Base):
@@ -449,7 +449,7 @@ class ScheduledReport(Base):
     schedule_cron = Column(Text)
     last_sent_at = Column(DateTime(timezone=True))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class UsageEvent(Base):
@@ -462,7 +462,7 @@ class UsageEvent(Base):
     resource_type = Column(Text)
     resource_id = Column(UUID(as_uuid=True))
     event_metadata = Column("metadata", JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class Webhook(Base):
@@ -476,7 +476,7 @@ class Webhook(Base):
     events = Column(ARRAY(Text), nullable=False)
     enabled = Column(Boolean, default=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     deliveries = relationship("WebhookDelivery", back_populates="webhook", cascade="all, delete-orphan")
 
@@ -493,7 +493,7 @@ class WebhookDelivery(Base):
     response_body = Column(Text)
     duration_ms = Column(Integer)
     success = Column(Boolean)
-    attempted_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    attempted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     next_retry_at = Column(DateTime(timezone=True))
 
     webhook = relationship("Webhook", back_populates="deliveries")
@@ -512,7 +512,7 @@ class AiUsage(Base):
     task_type = Column(Text)
     crawl_id = Column(UUID(as_uuid=True), ForeignKey("crawls.id"))
     issue_id = Column(UUID(as_uuid=True), ForeignKey("issues.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 
@@ -533,7 +533,7 @@ class FixVersion(Base):
     applied_value = Column(Text)          # value written by the fix
     applied_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     action = Column(Text, nullable=False, default="apply")  # apply | rollback
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_fix_versions_issue_id", "issue_id"),
@@ -554,8 +554,8 @@ class SearchConsoleConnection(Base):
     expires_at = Column(DateTime(timezone=True))
     connected_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     last_sync_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_search_console_connections_site", "site_id", unique=True),
@@ -577,9 +577,9 @@ class SearchConsoleSyncRun(Base):
     inspections_synced = Column(Integer, nullable=False, default=0)
     sitemaps_synced = Column(Integer, nullable=False, default=0)
     error_message = Column(Text)
-    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_search_console_sync_runs_site", "site_id", "created_at"),
@@ -602,7 +602,7 @@ class SearchConsolePageMetric(Base):
     impressions = Column(Numeric(12, 2), nullable=False, default=0)
     ctr = Column(Numeric(8, 6), nullable=False, default=0)
     position = Column(Numeric(8, 3), nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_gsc_page_metrics_site_page", "site_id", "page_url"),
@@ -627,7 +627,7 @@ class SearchConsoleQueryMetric(Base):
     impressions = Column(Numeric(12, 2), nullable=False, default=0)
     ctr = Column(Numeric(8, 6), nullable=False, default=0)
     position = Column(Numeric(8, 3), nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_gsc_query_metrics_site_query", "site_id", "query"),
@@ -652,7 +652,7 @@ class SearchConsoleInspection(Base):
     google_canonical = Column(Text)
     user_canonical = Column(Text)
     raw = Column(JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_gsc_inspections_site_url", "site_id", "url"),
@@ -674,7 +674,7 @@ class SearchConsoleSitemap(Base):
     errors = Column(Integer, default=0)
     warnings = Column(Integer, default=0)
     raw = Column(JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_gsc_sitemaps_site_path", "site_id", "path"),
@@ -697,8 +697,8 @@ class SiteOpportunity(Base):
     issue_type = Column(Text)
     data = Column(JSONB)
     status = Column(Text, nullable=False, default="open")
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_site_opportunities_site_priority", "site_id", "priority_score"),
@@ -718,8 +718,8 @@ class ConnectionCertification(Base):
     details = Column(JSONB)
     last_tested_at = Column(DateTime(timezone=True))
     safe_fix_tested_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_connection_certifications_site_type", "site_id", "connection_type", unique=True),
@@ -742,7 +742,7 @@ class SnippetInsight(Base):
     title = Column(Text, nullable=False)
     description = Column(Text)
     data = Column(JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_snippet_insights_site_type", "site_id", "insight_type"),
@@ -763,8 +763,8 @@ class GoogleAnalyticsConnection(Base):
     expires_at = Column(DateTime(timezone=True))
     connected_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     last_sync_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_google_analytics_connections_site", "site_id", unique=True),
@@ -783,9 +783,9 @@ class GoogleAnalyticsSyncRun(Base):
     days = Column(Integer, nullable=False, default=90)
     rows_synced = Column(Integer, nullable=False, default=0)
     error_message = Column(Text)
-    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_google_analytics_sync_runs_site", "site_id", "created_at"),
@@ -809,7 +809,7 @@ class AnalyticsPageMetric(Base):
     total_revenue = Column(Numeric(12, 2), nullable=False, default=0)
     transactions = Column(Numeric(12, 2), nullable=False, default=0)
     engagement_rate = Column(Numeric(8, 6), nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_analytics_page_metrics_site_page", "site_id", "page_url"),
@@ -842,8 +842,8 @@ class PageSpeedRun(Base):
     crux_metrics = Column(JSONB)
     screenshot = Column(Text)
     error_message = Column(Text)
-    checked_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    checked_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_pagespeed_runs_site_url", "site_id", "page_url", "strategy"),
@@ -862,8 +862,8 @@ class IndexNowKey(Base):
     verified = Column(Boolean, nullable=False, default=False)
     last_verified_at = Column(DateTime(timezone=True))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_indexnow_keys_site", "site_id", unique=True),
@@ -881,8 +881,8 @@ class IndexNowSubmission(Base):
     status_code = Column(SmallInteger)
     success = Column(Boolean)
     response_body = Column(Text)
-    submitted_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    submitted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_indexnow_submissions_site", "site_id", "created_at"),
@@ -903,7 +903,7 @@ class CompetitorPageComparison(Base):
     gaps = Column(JSONB)
     site_signals = Column(JSONB)
     competitor_signals = Column(JSONB)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_competitor_page_comparisons_competitor", "competitor_id", "created_at"),
@@ -920,7 +920,7 @@ class Client(Base):
     brand_name = Column(Text)
     logo_url = Column(Text)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_clients_org", "org_id"),
@@ -938,7 +938,7 @@ class ReportShareLink(Base):
     snapshot = Column(JSONB, nullable=False)
     expires_at = Column(DateTime(timezone=True))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_report_share_links_site", "site_id", "created_at"),
@@ -969,7 +969,7 @@ class FixProofSnapshot(Base):
     pagespeed_score = Column(SmallInteger)
     evidence = Column(JSONB)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_fix_proof_snapshots_site_created", "site_id", "created_at"),
@@ -989,9 +989,9 @@ class AutopilotRun(Base):
     next_actions = Column(JSONB)
     provider_health = Column(JSONB)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_autopilot_runs_org_created", "org_id", "created_at"),
@@ -1009,7 +1009,7 @@ class AiVisibilityPrompt(Base):
     target_entity = Column(Text)
     competitor_domains = Column(ARRAY(Text))
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_ai_visibility_prompts_site", "site_id", "created_at"),
@@ -1033,7 +1033,7 @@ class AiVisibilityRun(Base):
     recommendations = Column(JSONB)
     evidence = Column(JSONB)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_ai_visibility_runs_site_created", "site_id", "created_at"),
@@ -1055,8 +1055,8 @@ class ContentBrief(Base):
     github_pr_url = Column(Text)
     github_branch = Column(Text)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_content_briefs_site_created", "site_id", "created_at"),
@@ -1075,9 +1075,9 @@ class KeywordProviderSyncRun(Base):
     message = Column(Text)
     data = Column(JSONB)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    started_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    started_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_keyword_provider_sync_runs_site", "site_id", "created_at"),
@@ -1095,7 +1095,7 @@ class CrawlLogImport(Base):
     rows_ingested = Column(Integer, nullable=False, default=0)
     summary = Column(JSONB)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_crawl_log_imports_site_created", "site_id", "created_at"),
@@ -1116,7 +1116,7 @@ class CrawlLogEntry(Base):
     bot_family = Column(Text)
     bytes_sent = Column(Integer)
     requested_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_crawl_log_entries_site_url", "site_id", "url"),
@@ -1132,7 +1132,7 @@ class ClientSite(Base):
     client_id = Column(UUID(as_uuid=True), ForeignKey("clients.id"), nullable=False)
     site_id = Column(UUID(as_uuid=True), ForeignKey("sites.id"), nullable=False)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_client_sites_client_site", "client_id", "site_id", unique=True),

@@ -55,7 +55,7 @@ async def create_customer(email: str, name: str, org_id: str) -> str:
             metadata={"org_id": org_id},
         )
         return customer.id
-    except stripe.error.StripeError:
+    except stripe.StripeError:
         return ""
 
 
@@ -76,7 +76,7 @@ async def create_checkout_session(
             cancel_url=cancel_url,
         )
         return session.url
-    except stripe.error.StripeError:
+    except stripe.StripeError:
         return ""
 
 
@@ -88,7 +88,7 @@ async def create_portal_session(customer_id: str, return_url: str) -> str:
             return_url=return_url,
         )
         return session.url
-    except stripe.error.StripeError:
+    except stripe.StripeError:
         return ""
 
 

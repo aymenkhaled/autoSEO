@@ -10,9 +10,37 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from workers.celery_app import app
-
 logger = structlog.get_logger()
+
+try:
+    from workers.celery_app import app  # type: ignore
+    _CELERY_AVAILABLE = True
+except Exception:
+    _CELERY_AVAILABLE = False
+
+    class _NoopTask:
+        def __init__(self, fn):
+            self.fn = fn
+
+        def __call__(self, *a, **kw):
+            return self.fn(*a, **kw)
+
+        def delay(self, *a, **kw):
+            logger.warning("celery_unavailable_skipping_dispatch", task=self.fn.__name__)
+
+        def retry(self, *a, **kw):
+            raise RuntimeError("Celery retry called outside of Celery worker")
+
+    class _NoopApp:
+        def task(self, *a, **kw):
+            def deco(fn):
+                return _NoopTask(fn)
+
+            if a and callable(a[0]) and not kw:
+                return _NoopTask(a[0])
+            return deco
+
+    app = _NoopApp()  # type: ignore
 
 
 def _aware(value):

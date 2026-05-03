@@ -102,6 +102,12 @@ After disabling, users can sign up and log in immediately without confirming the
 | Crawler | Crawl4AI + Camoufox + ScrapFly |
 | Payments | Stripe (subscriptions + metered) |
 
+## Bug Fixes Applied (May 2026)
+- **`models/tables.py`** — Replaced all 69 `datetime.utcnow` column defaults/onupdates with `lambda: datetime.now(timezone.utc)` (Python 3.12 deprecation fix); added `timezone` to datetime import.
+- **`services/stripe_service.py`** — Fixed `stripe.error.StripeError` → `stripe.StripeError` for Stripe SDK v15.x compatibility (error classes moved to top-level namespace in v5+).
+- **`workers/tasks/report.py`** — Added Celery/Redis noop fallback (matching crawl.py and fix.py patterns) so the module imports cleanly without a running Redis instance.
+- **`services/crawl_budget.py`** — Removed dead double-assignment (`requested_at = None` immediately overwritten on next line).
+
 ## Phase 2 — Crawler Build Plan v4 / Gap Analysis (April 2026)
 Implemented from gap-analysis files:
 - **Crawler**: URL normalization & dedup (`packages/crawler/url_utils.py`); SSRF protection (private/loopback IPs blocked); concurrent fetching with `asyncio.Semaphore(5)`; crawl cancellation via `DELETE /crawls/{id}` (worker checks DB status between batches of 25); HTTP status codes & response headers threaded through Jina layer; real broken-link tracking (4xx/5xx URLs persisted as zero-score pages).

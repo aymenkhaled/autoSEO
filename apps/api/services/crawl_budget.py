@@ -175,7 +175,6 @@ def parse_log_lines(raw_log: str, *, site_domain: str, limit: int = 5000) -> tup
             bytes_sent = int(byte_text) if byte_text != "-" else None
         except ValueError:
             bytes_sent = None
-        requested_at = None
         requested_at = _safe_datetime(match.group("time"))
         ua = match.group("ua")
         entries.append({
