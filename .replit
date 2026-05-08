@@ -81,9 +81,5 @@ run = ["npm", "run", "start"]
 [userenv]
 
 [userenv.shared]
-SUPABASE_JWT_SECRET = "autoseo-replit-jwt-secret-minimum-32-chars-secure!!"
 ENVIRONMENT = "development"
 DEBUG = "true"
-VITE_SUPABASE_URL = "https://qqzdoyqeftbqoldhheut.supabase.co"
-VITE_SUPABASE_ANON_KEY = "sb_publishable_UqaOBgb5-oMQZYUQjuqvJw_DtuVAWb5"
-DOPPLER_MASTER_ENCRYPTION_KEY = "f63817b5702c2b4d42c9f5503f8152779ba54b23df7592e99ed1578ae17fa843"
