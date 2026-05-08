@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 
 import { DeleteSiteDialog } from '@/components/sites/DeleteSiteDialog'
-import { analyticsApi, api, changeLogApi, connectionsApi, indexNowApi, issuesApi, opportunitiesApi, pageSpeedApi, searchConsoleApi, sitesApi, snippetApi } from '@/lib/api-client'
+import { analyticsApi, api, changeLogApi, connectionsApi, crawlsApi, indexNowApi, issuesApi, opportunitiesApi, pageSpeedApi, searchConsoleApi, sitesApi, snippetApi } from '@/lib/api-client'
 import { SUPABASE_AUTH_ENABLED } from '@/lib/auth-mode'
 import { getLocalAccessToken } from '@/lib/auth-storage'
 import { readinessMeta } from '@/lib/readiness'
@@ -2234,7 +2234,7 @@ export default function SiteDetailPage() {
                             <div key={issue.id} className="flex items-start gap-2">
                               <span className={`mt-0.5 h-1.5 w-1.5 rounded-full flex-shrink-0 ${issue.severity === 'critical' ? 'bg-red-500' : issue.severity === 'high' ? 'bg-red-400' : issue.severity === 'medium' ? 'bg-amber-400' : 'bg-muted-foreground/40'}`} />
                               <div className="min-w-0 flex-1">
-                                <p className="text-[10px] font-semibold text-foreground">{ISSUE_LABELS[issue.type] ?? issue.type.replace(/_/g, ' ')}</p>
+                                <p className="text-[10px] font-semibold text-foreground">{ISSUE_TYPE_LABELS[issue.type] ?? issue.type.replace(/_/g, ' ')}</p>
                                 {issue.current_value && <p className="text-[10px] text-muted-foreground truncate">Current: {issue.current_value}</p>}
                                 {issue.proposed_fix && <p className="text-[10px] text-green-400/80 truncate">Fix: {issue.proposed_fix}</p>}
                                 <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">

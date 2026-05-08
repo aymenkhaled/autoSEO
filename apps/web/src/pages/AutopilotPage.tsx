@@ -104,7 +104,7 @@ export default function AutopilotPage() {
   })
 
   const actions = nextActions.data?.actions ?? []
-  const providerHealth: Record<string, { configured: boolean; role: string }> = nextActions.data?.provider_health ?? {}
+  const providerHealth: Record<string, { configured: boolean; role: string; status?: string }> = nextActions.data?.provider_health ?? {}
   const proofCurrent = proof.data?.current
   const proofPairs: any[] = proof.data?.proof_pairs ?? []
   const proofStatus: string | undefined = proof.data?.proof_status

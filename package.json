@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "build": "npm ci --prefix apps/web && npm run build --prefix apps/web",
-    "start": "cd apps/api && python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000}"
+    "build": "python3 -m venv .venv && PIP_CONFIG_FILE=/dev/null .venv/bin/pip install -r apps/api/requirements.txt --quiet && npm ci --prefix apps/web && npm run build --prefix apps/web",
+    "start": "cd apps/api && ../.venv/bin/uvicorn main:app --host 0.0.0.0 --port ${PORT:-5000}"
   }
 }

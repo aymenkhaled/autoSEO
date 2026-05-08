@@ -67,6 +67,8 @@ export const sitesApi = {
   create: (data: any) => api.post('sites', { json: data }).json<any>(),
   update: (id: string, data: any) => api.patch(`sites/${id}`, { json: data }).json<any>(),
   delete: (id: string) => api.delete(`sites/${id}`).json<any>(),
+  pageDetail: (siteId: string, pageId: string) =>
+    api.get(`sites/${siteId}/pages/${pageId}`).json<any>(),
 }
 
 // Crawls
@@ -88,6 +90,8 @@ export const issuesApi = {
   rootCauseFix: (data: { site_id: string; issue_type: string; mode?: 'plan' | 'ai_preview' | 'github_pr'; business_context?: Record<string, any> }) =>
     api.post('issues/root-cause-fix', { json: data }).json<any>(),
   get: (id: string) => api.get(`issues/${id}`).json<any>(),
+  prioritizedIssues: (siteId: string) =>
+    api.get('issues/prioritized', { searchParams: { site_id: siteId } }).json<any>(),
 }
 
 export const dashboardApi = {
