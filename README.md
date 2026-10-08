@@ -11,13 +11,17 @@ The app supports two browser auth modes:
 
 ## Files You Need
 
-- Root backend env: [`.env.example`](/C:/Users/khale/Desktop/alexis%20project/autoSEO/.env.example)
-- Frontend env example: [`apps/web/.env.local.example`](/C:/Users/khale/Desktop/alexis%20project/autoSEO/apps/web/.env.local.example)
+- Backend env template: [`.env.example`](.env.example)
+- Frontend env template: [`apps/web/.env.local.example`](apps/web/.env.local.example)
 
-Copy them to:
+From the repository root, copy these templates to the matching local configuration files:
 
-- `C:\Users\khale\Desktop\alexis project\autoSEO\.env`
-- `C:\Users\khale\Desktop\alexis project\autoSEO\apps\web\.env.local`
+```powershell
+Copy-Item .env.example .env
+Copy-Item apps/web/.env.local.example apps/web/.env.local
+```
+
+Use local development credentials only. Keep `.env` and `.env.local` out of Git.
 
 ## Minimum Local Setup
 
